@@ -1,8 +1,8 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Creamos el archivo de la base de datos local
-SQLALCHEMY_DATABASE_URL = "sqlite:///entrenador_app.db"
+# Creamos el archivo de la base de datos local en la carpeta datos_locales
+SQLALCHEMY_DATABASE_URL = "sqlite:///datos_locales/entrenador_app.db"
 
 # engine es el "motor" que habla con SQLite
 engine = create_engine(
