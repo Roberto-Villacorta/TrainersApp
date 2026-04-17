@@ -1,5 +1,5 @@
-from database import engine, Base
-from models import *
+from bbdd.database import engine, Base
+from bbdd.models import *
 # Importamos models para que SQLAlchemy lea las clases antes de crear las tablas
 
 def iniciar_base_datos():

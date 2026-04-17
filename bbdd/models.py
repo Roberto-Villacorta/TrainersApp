@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
-from database import Base
+from bbdd.database import Base
 import datetime
 
 class Atleta(Base):
@@ -36,55 +36,55 @@ class MetricaCorporal(Base):
 class FormularioSemanal(Base):
     __tablename__ = "formularios_semanales"
 
-    id = Column(Integer, primary_key=True, index=True) [cite: 8]
-    atleta_id = Column(Integer, ForeignKey("atletas.id")) [cite: 9]
-    fecha_registro = Column(Date, default=datetime.date.today) [cite: 10]
+    id = Column(Integer, primary_key=True, index=True)
+    atleta_id = Column(Integer, ForeignKey("atletas.id"))
+    fecha_registro = Column(Date, default=datetime.date.today)
     
     # 1. Satisfacción
-    satisfaccion_general = Column(Integer)  # 1-5 [cite: 11]
-    comentario_satisfaccion = Column(Text) [cite: 12]
+    satisfaccion_general = Column(Integer)  # 1-5
+    comentario_satisfaccion = Column(Text)
     
     # 2. Adherencia
-    adherencia_plan = Column(String)  # baja/media/alta [cite: 14]
-    lleva_mejor = Column(Text) [cite: 15]
-    cuesta_mas = Column(Text) [cite: 16]
+    adherencia_plan = Column(String)  # baja/media/alta
+    lleva_mejor = Column(Text)
+    cuesta_mas = Column(Text)
     
     # 3. Cambios en el plan
-    modificaciones_plan = Column(Boolean) [cite: 18]
-    que_quitaria = Column(Text) [cite: 19]
-    que_anadiria = Column(Text) [cite: 20]
+    modificaciones_plan = Column(Boolean)
+    que_quitaria = Column(Text)
+    que_anadiria = Column(Text)
     
     # 4. Saciedad
-    nivel_saciedad = Column(String) # hambre / normal / demasiada comida [cite: 22]
-    comentario_saciedad = Column(Text) [cite: 23]
+    nivel_saciedad = Column(String) # hambre / normal / demasiada comida
+    comentario_saciedad = Column(Text)
     
     # 5 y 6. Picoteos y Consumo
-    hay_picoteos = Column(Boolean) [cite: 25]
-    frecuencia_picoteos = Column(String) # nunca / a veces / frecuente [cite: 27]
-    fruta_consumo = Column(Integer) [cite: 28]
-    verdura_consumo = Column(Integer) [cite: 29]
-    pescado_blanco_consumo = Column(Integer) [cite: 30]
-    pescado_azul_consumo = Column(Integer) [cite: 31]
+    hay_picoteos = Column(Boolean)
+    frecuencia_picoteos = Column(String) # nunca / a veces / frecuente
+    fruta_consumo = Column(Integer)
+    verdura_consumo = Column(Integer)
+    pescado_blanco_consumo = Column(Integer)
+    pescado_azul_consumo = Column(Integer)
     
     # 7. Fin de semana
-    sigue_plan_fin_semana = Column(Boolean) [cite: 33]
-    eventos_fin_semana = Column(Boolean) [cite: 34]
-    consume_alcohol = Column(Boolean) [cite: 35]
-    cantidad_alcohol = Column(String) [cite: 36]
+    sigue_plan_fin_semana = Column(Boolean)
+    eventos_fin_semana = Column(Boolean)
+    consume_alcohol = Column(Boolean)
+    cantidad_alcohol = Column(String)
     
     # 8. Nutrición entreno
-    pre_entreno = Column(Text) [cite: 38]
-    intra_entreno = Column(Text) [cite: 39]
-    post_entreno = Column(Text) [cite: 40]
+    pre_entreno = Column(Text)
+    intra_entreno = Column(Text)
+    post_entreno = Column(Text)
     
     # 9. Mejora y Alertas/Tendencias
-    mejora_entrenamiento = Column(Integer) # 1-5 [cite: 42]
-    comentario_mejora = Column(Text) [cite: 42]
-    alerta_fatiga = Column(Integer) [cite: 96]
-    alerta_dolor = Column(Integer) [cite: 98]
-    alerta_sueno = Column(Integer) [cite: 99]
-    alerta_estres = Column(Integer) [cite: 101]
-    alerta_rendimiento = Column(Integer) [cite: 102]
+    mejora_entrenamiento = Column(Integer) # 1-5
+    comentario_mejora = Column(Text)
+    alerta_fatiga = Column(Integer)
+    alerta_dolor = Column(Integer)
+    alerta_sueno = Column(Integer)
+    alerta_estres = Column(Integer)
+    alerta_rendimiento = Column(Integer)
 
     atleta = relationship("Atleta", back_populates="formularios")
 
