@@ -1,3 +1,5 @@
 .venv/
 *.db
 datos_locales/entrenador_app.db
+logs/
+*.log
