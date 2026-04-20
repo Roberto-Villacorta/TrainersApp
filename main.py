@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import sys
 from bbdd.crear_tablas import iniciar_base_datos
 from pantallas.dashboard import Dashboard
 
@@ -50,9 +51,32 @@ class MainApp(ctk.CTk):
         ctk.CTkLabel(self.pantallas["archivos"], text="Pantalla 'Carga de Archivos' en construcción", font=ctk.CTkFont(size=20)).pack(expand=True)
         
         # Mostrar el dashboard por defecto al iniciar la app
+        self.pantalla_actual = "dashboard"
         self.mostrar_pantalla("dashboard")
         
+        # Bindings globales para permitir scroll con la rueda del ratón en cualquier parte de la app
+        self.bind_all("<Button-4>", self._on_mousewheel)
+        self.bind_all("<Button-5>", self._on_mousewheel)
+        self.bind_all("<MouseWheel>", self._on_mousewheel)
+        
+    def _on_mousewheel(self, event):
+        # Forzar el evento de scroll directamente sobre el canvas interno de CustomTkinter
+        # para que funcione sin importar si el ratón está encima de una tarjeta o etiqueta
+        if hasattr(self, "pantalla_actual") and self.pantalla_actual in self.pantallas:
+            pantalla = self.pantallas[self.pantalla_actual]
+            if hasattr(pantalla, "_parent_canvas"):
+                if sys.platform == "darwin" or sys.platform == "apple":
+                    pantalla._parent_canvas.yview_scroll(int(-1 * (event.delta)), "units")
+                elif sys.platform == "win32":
+                    pantalla._parent_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                else:
+                    if event.num == 4:
+                        pantalla._parent_canvas.yview_scroll(-1, "units")
+                    elif event.num == 5:
+                        pantalla._parent_canvas.yview_scroll(1, "units")
+
     def mostrar_pantalla(self, nombre_pantalla):
+        self.pantalla_actual = nombre_pantalla
         # 1. Ocultar todas las pantallas
         for pantalla in self.pantallas.values():
             pantalla.pack_forget()

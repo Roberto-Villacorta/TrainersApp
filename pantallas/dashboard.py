@@ -1,11 +1,18 @@
 import customtkinter as ctk
 import calendar
 from datetime import datetime
+from bbdd.database import SessionLocal
+from logica.dashboard_service import DashboardService
 
 class Dashboard(ctk.CTkScrollableFrame):
     def __init__(self, master, **kwargs):
         # Para que el scroll vertical funcione bien en toda la pantalla
         super().__init__(master, **kwargs)
+        
+        # Obtener datos reales de la base de datos
+        with SessionLocal() as session:
+            dashboard_service = DashboardService(session)
+            metricas = dashboard_service.obtener_metricas_dashboard()
         
         # ==========================================
         # 1. ATLETAS (Arriba)
@@ -16,7 +23,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         self.lbl_titulo_atletas = ctk.CTkLabel(self.frame_atletas, text="Atletas Activos", font=ctk.CTkFont(size=24, weight="bold"))
         self.lbl_titulo_atletas.pack(pady=(20, 5))
         
-        self.lbl_num_atletas = ctk.CTkLabel(self.frame_atletas, text="24", font=ctk.CTkFont(size=64, weight="bold"), text_color="#1f6aa5")
+        self.lbl_num_atletas = ctk.CTkLabel(self.frame_atletas, text=str(metricas["atletas_activos"]), font=ctk.CTkFont(size=64, weight="bold"), text_color="#1f6aa5")
         self.lbl_num_atletas.pack(pady=(5, 20))
         
         # ==========================================
@@ -28,7 +35,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         self.lbl_titulo_forms = ctk.CTkLabel(self.frame_formularios, text="Formularios Pendientes", font=ctk.CTkFont(size=24, weight="bold"))
         self.lbl_titulo_forms.pack(pady=(20, 5))
         
-        self.lbl_num_forms = ctk.CTkLabel(self.frame_formularios, text="7", font=ctk.CTkFont(size=64, weight="bold"), text_color="#c25757")
+        self.lbl_num_forms = ctk.CTkLabel(self.frame_formularios, text=str(metricas["formularios_pendientes"]), font=ctk.CTkFont(size=64, weight="bold"), text_color="#c25757")
         self.lbl_num_forms.pack(pady=(5, 20))
         
         # ==========================================
@@ -80,18 +87,39 @@ class Dashboard(ctk.CTkScrollableFrame):
             btn.destroy()
         self.dias_botones.clear()
         
+        # Obtener las llamadas programadas para este mes
+        llamadas_mes = {}
+        with SessionLocal() as session:
+            ds = DashboardService(session)
+            llamadas = ds.obtener_llamadas_mes(self.current_year, self.current_month)
+            for ll in llamadas:
+                dia = ll.fecha.day
+                if dia not in llamadas_mes:
+                    llamadas_mes[dia] = []
+                llamadas_mes[dia].append(ll.nombre)
+        
         # Generar matriz del mes (días en 0 significan que pertenecen al mes anterior o siguiente)
         cal = calendar.monthcalendar(self.current_year, self.current_month)
         
         for row, semana in enumerate(cal):
             for col, dia in enumerate(semana):
                 if dia != 0:
+                    texto_boton = str(dia)
+                    color_fondo = ("gray80", "gray25")
+                    color_hover = ("gray70", "gray35")
+                    
+                    if dia in llamadas_mes:
+                        # Si hay llamadas, añadir el nombre al texto y cambiar el color
+                        texto_boton += "\n" + "\n".join(llamadas_mes[dia])
+                        color_fondo = ("#4a90e2", "#2b5c8f")
+                        color_hover = ("#357abd", "#1d4066")
+
                     btn_dia = ctk.CTkButton(
                         self.frame_grid_calendario, 
-                        text=str(dia), 
-                        fg_color=("gray80", "gray25"), 
+                        text=texto_boton, 
+                        fg_color=color_fondo, 
                         text_color=("black", "white"),
-                        hover_color=("gray70", "gray35"),
+                        hover_color=color_hover,
                         height=60,
                         command=lambda d=dia: self.abrir_dialogo_llamada(d)
                     )
@@ -119,10 +147,14 @@ class Dashboard(ctk.CTkScrollableFrame):
         dialog = ctk.CTkInputDialog(text=f"Agendar llamada para el {dia}/{self.current_month}/{self.current_year}:", title="Nueva Llamada")
         llamada = dialog.get_input()
         if llamada:
-            print(f"Llamada guardada: '{llamada}' el {dia}/{self.current_month}/{self.current_year}")
-            # En el futuro, aquí se guardaría en la base de datos y podríamos cambiar el color del botón
-            # o añadir un indicador para que el entrenador vea que hay una llamada ese día.
-
+            fecha_llamada = datetime(self.current_year, self.current_month, dia).date()
+            with SessionLocal() as session:
+                ds = DashboardService(session)
+                if ds.agregar_llamada(llamada, fecha_llamada):
+                    print(f"Llamada guardada en BBDD: '{llamada}' el {dia}/{self.current_month}/{self.current_year}")
+            
+            # Refrescar el calendario para que se muestre la nueva llamada
+            self.actualizar_calendario()
 # ==========================================
 # TEST INDIVIDUAL DE LA PANTALLA
 # ==========================================

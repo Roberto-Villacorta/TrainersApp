@@ -125,3 +125,10 @@ class ArchivoSubido(Base):
     fecha_subida = Column(DateTime, default=datetime.datetime.now)
 
     atleta = relationship("Atleta", back_populates="archivos")
+
+class Llamada(Base):
+    __tablename__ = "llamadas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String, nullable=False)
+    fecha = Column(Date, nullable=False)
