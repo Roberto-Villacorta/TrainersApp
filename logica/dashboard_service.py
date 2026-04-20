@@ -1,6 +1,18 @@
 from sqlalchemy.orm import Session
 from bbdd.repository import DashboardRepository
 import datetime
+import calendar
+
+def _add_months(sourcedate, months):
+    month = sourcedate.month - 1 + months
+    year = sourcedate.year + month // 12
+    month = month // 12 + 1 if (month % 12 + 1) > 12 else month % 12 + 1 # safer modulo
+    # A cleaner logic
+    month = sourcedate.month - 1 + months
+    year = sourcedate.year + month // 12
+    month = month % 12 + 1
+    day = min(sourcedate.day, calendar.monthrange(year, month)[1])
+    return datetime.date(year, month, day)
 
 class DashboardService:
     def __init__(self, session: Session):
@@ -27,14 +39,27 @@ class DashboardService:
             }
 
     def agregar_llamada(self, nombre: str, fecha: datetime.date):
-        """Guarda una nueva llamada y aplica el commit en la BBDD."""
+        """Guarda una nueva llamada para este mes y los dos siguientes y aplica el commit en la BBDD."""
         try:
             self.repository.guardar_llamada(nombre, fecha)
+            self.repository.guardar_llamada(nombre, _add_months(fecha, 1))
+            self.repository.guardar_llamada(nombre, _add_months(fecha, 2))
             self.repository.session.commit()
             return True
         except Exception as e:
             self.repository.session.rollback()
             print(f"Error al guardar llamada: {e}")
+            return False
+
+    def eliminar_llamadas(self, fecha: datetime.date):
+        """Elimina todas las llamadas programadas para una fecha dada."""
+        try:
+            self.repository.eliminar_llamadas_por_fecha(fecha)
+            self.repository.session.commit()
+            return True
+        except Exception as e:
+            self.repository.session.rollback()
+            print(f"Error al eliminar llamadas: {e}")
             return False
 
     def obtener_llamadas_mes(self, anio: int, mes: int) -> list:

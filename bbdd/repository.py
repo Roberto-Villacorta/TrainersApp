@@ -28,3 +28,7 @@ class DashboardRepository:
             extract('year', Llamada.fecha) == anio,
             extract('month', Llamada.fecha) == mes
         ).all()
+
+    def eliminar_llamadas_por_fecha(self, fecha: datetime.date):
+        self.session.query(Llamada).filter(Llamada.fecha == fecha).delete()
+

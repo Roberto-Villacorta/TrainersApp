@@ -121,7 +121,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                         text_color=("black", "white"),
                         hover_color=color_hover,
                         height=60,
-                        command=lambda d=dia: self.abrir_dialogo_llamada(d)
+                        command=lambda d=dia, tiene=(dia in llamadas_mes): self.abrir_dialogo_llamada(d, tiene)
                     )
                     btn_dia.grid(row=row+1, column=col, padx=2, pady=2, sticky="nsew")
                     self.dias_botones.append(btn_dia)
@@ -142,20 +142,39 @@ class Dashboard(ctk.CTkScrollableFrame):
             self.current_month += 1
         self.actualizar_calendario()
         
-    def abrir_dialogo_llamada(self, dia):
+    def abrir_dialogo_llamada(self, dia, tiene_llamadas=False):
+        fecha_llamada = datetime(self.current_year, self.current_month, dia).date()
+
+        if tiene_llamadas:
+            from tkinter import messagebox
+            respuesta = messagebox.askyesnocancel(
+                "Gestión de Llamadas", 
+                f"Hay llamadas programadas para el {dia}/{self.current_month}/{self.current_year}.\n\n¿Deseas eliminarlas?\n\n[Sí] = Eliminar\n[No] = Añadir otra llamada\n[Cancelar] = Salir"
+            )
+            
+            if respuesta is True: # Sí, borrar
+                with SessionLocal() as session:
+                    ds = DashboardService(session)
+                    if ds.eliminar_llamadas(fecha_llamada):
+                        print(f"Llamadas eliminadas el {dia}/{self.current_month}/{self.current_year}")
+                self.actualizar_calendario()
+                return
+            elif respuesta is False: # No, añadir nueva
+                pass # Sigue el código abajo
+            else: # None, Cancelar
+                return
+
         # Un cuadro de diálogo sencillo para que el entrenador agende la llamada en ese día
         dialog = ctk.CTkInputDialog(text=f"Agendar llamada para el {dia}/{self.current_month}/{self.current_year}:", title="Nueva Llamada")
         llamada = dialog.get_input()
         if llamada:
-            fecha_llamada = datetime(self.current_year, self.current_month, dia).date()
             with SessionLocal() as session:
                 ds = DashboardService(session)
                 if ds.agregar_llamada(llamada, fecha_llamada):
-                    print(f"Llamada guardada en BBDD: '{llamada}' el {dia}/{self.current_month}/{self.current_year}")
+                    print(f"Llamada guardada en BBDD (y meses siguientes): '{llamada}' el {dia}/{self.current_month}/{self.current_year}")
             
             # Refrescar el calendario para que se muestre la nueva llamada
-            self.actualizar_calendario()
-# ==========================================
+            self.actualizar_calendario()# ==========================================
 # TEST INDIVIDUAL DE LA PANTALLA
 # ==========================================
 if __name__ == "__main__":
