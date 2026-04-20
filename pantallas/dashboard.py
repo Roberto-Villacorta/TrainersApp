@@ -3,6 +3,95 @@ import calendar
 from datetime import datetime
 from bbdd.database import SessionLocal
 from logica.dashboard_service import DashboardService
+from utils.logger import app_logger
+
+class DialogoGestionLlamadas(ctk.CTkToplevel):
+    def __init__(self, master_dashboard, dia, fecha_llamada, llamadas):
+        super().__init__(master_dashboard)
+        self.title(f"Llamadas del {dia}/{fecha_llamada.month}/{fecha_llamada.year}")
+        self.geometry("450x400")
+        self.master_dashboard = master_dashboard
+        self.fecha_llamada = fecha_llamada
+        self.llamadas = llamadas
+        
+        # Hazlo modal
+        self.transient(master_dashboard.winfo_toplevel())
+        self.after(100, self.grab_set)
+
+        self.lbl_titulo = ctk.CTkLabel(self, text=f"Llamadas Programadas", font=ctk.CTkFont(size=20, weight="bold"))
+        self.lbl_titulo.pack(pady=10)
+
+        self.frame_lista = ctk.CTkScrollableFrame(self)
+        self.frame_lista.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.renderizar_lista()
+
+        self.btn_nueva = ctk.CTkButton(self, text="+ Añadir nueva llamada", command=self.agregar_nueva)
+        self.btn_nueva.pack(pady=10)
+
+    def renderizar_lista(self):
+        for widget in self.frame_lista.winfo_children():
+            widget.destroy()
+
+        if not self.llamadas:
+            lbl = ctk.CTkLabel(self.frame_lista, text="No hay llamadas para este día.")
+            lbl.pack(pady=20)
+            return
+
+        for ll in self.llamadas:
+            frame_item = ctk.CTkFrame(self.frame_lista)
+            frame_item.pack(fill="x", pady=5, padx=5)
+            
+            lbl_nombre = ctk.CTkLabel(frame_item, text=ll["nombre"], font=ctk.CTkFont(weight="bold"))
+            lbl_nombre.pack(side="left", padx=10)
+            
+            btn_borrar = ctk.CTkButton(frame_item, text="Borrar", width=50, fg_color="#c25757", hover_color="#a14242", 
+                                       command=lambda id_ll=ll["id"]: self.borrar_llamada(id_ll))
+            btn_borrar.pack(side="right", padx=5, pady=5)
+            
+            btn_editar = ctk.CTkButton(frame_item, text="Editar", width=50, 
+                                       command=lambda id_ll=ll["id"], nom=ll["nombre"]: self.editar_llamada(id_ll, nom))
+            btn_editar.pack(side="right", padx=5, pady=5)
+
+    def borrar_llamada(self, id_ll):
+        from tkinter import messagebox
+        if messagebox.askyesno("Borrar Llamada", "¿Estás seguro de que quieres borrar esta llamada específica?"):
+            with SessionLocal() as session:
+                ds = DashboardService(session)
+                if ds.eliminar_llamada_por_id(id_ll):
+                    app_logger.info(f"Llamada {id_ll} eliminada individualmente.")
+            self.llamadas = [ll for ll in self.llamadas if ll["id"] != id_ll]
+            self.renderizar_lista()
+            self.master_dashboard.actualizar_calendario()
+
+    def editar_llamada(self, id_ll, nombre_actual):
+        dialog = ctk.CTkInputDialog(text="Nuevo nombre para la llamada:", title="Editar Llamada")
+        nuevo_nombre = dialog.get_input()
+        if nuevo_nombre and nuevo_nombre != nombre_actual:
+            with SessionLocal() as session:
+                ds = DashboardService(session)
+                if ds.actualizar_llamada(id_ll, nuevo_nombre):
+                    app_logger.info(f"Llamada {id_ll} actualizada a {nuevo_nombre}.")
+            for ll in self.llamadas:
+                if ll["id"] == id_ll:
+                    ll["nombre"] = nuevo_nombre
+            self.renderizar_lista()
+            self.master_dashboard.actualizar_calendario()
+
+    def agregar_nueva(self):
+        dialog = ctk.CTkInputDialog(text="Nombre de la nueva llamada:", title="Añadir Llamada")
+        nombre = dialog.get_input()
+        if nombre:
+            with SessionLocal() as session:
+                ds = DashboardService(session)
+                if ds.agregar_llamada(nombre, self.fecha_llamada):
+                    app_logger.info(f"Nueva llamada agregada desde diálogo múltiple: {nombre}")
+            with SessionLocal() as session:
+                ds = DashboardService(session)
+                nuevas_llamadas = ds.obtener_llamadas_mes(self.fecha_llamada.year, self.fecha_llamada.month)
+                self.llamadas = [{"id": ll.id, "nombre": ll.nombre} for ll in nuevas_llamadas if ll.fecha.day == self.fecha_llamada.day]
+            self.renderizar_lista()
+            self.master_dashboard.actualizar_calendario()
 
 class Dashboard(ctk.CTkScrollableFrame):
     def __init__(self, master, **kwargs):
@@ -96,7 +185,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 dia = ll.fecha.day
                 if dia not in llamadas_mes:
                     llamadas_mes[dia] = []
-                llamadas_mes[dia].append(ll.nombre)
+                llamadas_mes[dia].append({"id": ll.id, "nombre": ll.nombre})
         
         # Generar matriz del mes (días en 0 significan que pertenecen al mes anterior o siguiente)
         cal = calendar.monthcalendar(self.current_year, self.current_month)
@@ -109,8 +198,9 @@ class Dashboard(ctk.CTkScrollableFrame):
                     color_hover = ("gray70", "gray35")
                     
                     if dia in llamadas_mes:
-                        # Si hay llamadas, añadir el nombre al texto y cambiar el color
-                        texto_boton += "\n" + "\n".join(llamadas_mes[dia])
+                        # Extraer nombres
+                        nombres = [ll["nombre"] for ll in llamadas_mes[dia]]
+                        texto_boton += "\n" + "\n".join(nombres)
                         color_fondo = ("#4a90e2", "#2b5c8f")
                         color_hover = ("#357abd", "#1d4066")
 
@@ -121,7 +211,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                         text_color=("black", "white"),
                         hover_color=color_hover,
                         height=60,
-                        command=lambda d=dia, tiene=(dia in llamadas_mes): self.abrir_dialogo_llamada(d, tiene)
+                        command=lambda d=dia, l_dia=llamadas_mes.get(dia, []): self.abrir_dialogo_llamada(d, l_dia)
                     )
                     btn_dia.grid(row=row+1, column=col, padx=2, pady=2, sticky="nsew")
                     self.dias_botones.append(btn_dia)
@@ -142,36 +232,22 @@ class Dashboard(ctk.CTkScrollableFrame):
             self.current_month += 1
         self.actualizar_calendario()
         
-    def abrir_dialogo_llamada(self, dia, tiene_llamadas=False):
+    def abrir_dialogo_llamada(self, dia, llamadas_del_dia):
         fecha_llamada = datetime(self.current_year, self.current_month, dia).date()
 
-        if tiene_llamadas:
-            from tkinter import messagebox
-            respuesta = messagebox.askyesnocancel(
-                "Gestión de Llamadas", 
-                f"Hay llamadas programadas para el {dia}/{self.current_month}/{self.current_year}.\n\n¿Deseas eliminarlas?\n\n[Sí] = Eliminar\n[No] = Añadir otra llamada\n[Cancelar] = Salir"
-            )
-            
-            if respuesta is True: # Sí, borrar
-                with SessionLocal() as session:
-                    ds = DashboardService(session)
-                    if ds.eliminar_llamadas(fecha_llamada):
-                        print(f"Llamadas eliminadas el {dia}/{self.current_month}/{self.current_year}")
-                self.actualizar_calendario()
-                return
-            elif respuesta is False: # No, añadir nueva
-                pass # Sigue el código abajo
-            else: # None, Cancelar
-                return
+        if llamadas_del_dia:
+            # Abrir el diálogo avanzado si hay llamadas
+            DialogoGestionLlamadas(self, dia, fecha_llamada, llamadas_del_dia)
+            return
 
-        # Un cuadro de diálogo sencillo para que el entrenador agende la llamada en ese día
+        # Comportamiento si no hay llamadas
         dialog = ctk.CTkInputDialog(text=f"Agendar llamada para el {dia}/{self.current_month}/{self.current_year}:", title="Nueva Llamada")
         llamada = dialog.get_input()
         if llamada:
             with SessionLocal() as session:
                 ds = DashboardService(session)
                 if ds.agregar_llamada(llamada, fecha_llamada):
-                    print(f"Llamada guardada en BBDD (y meses siguientes): '{llamada}' el {dia}/{self.current_month}/{self.current_year}")
+                    app_logger.info(f"Llamada guardada en BBDD (y meses siguientes): '{llamada}' el {dia}/{self.current_month}/{self.current_year}")
             
             # Refrescar el calendario para que se muestre la nueva llamada
             self.actualizar_calendario()# ==========================================
