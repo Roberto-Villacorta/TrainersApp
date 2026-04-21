@@ -4,6 +4,8 @@ import io
 from PIL import Image
 from bbdd.database import SessionLocal
 from logica.atletas_service import AtletasService
+from utils.dialogo_calendario import DialogoSeleccionarFecha
+from datetime import datetime
 
 class DialogoRegistrarAtleta(ctk.CTkToplevel):
     def __init__(self, master, al_completar_callback):
@@ -12,6 +14,7 @@ class DialogoRegistrarAtleta(ctk.CTkToplevel):
         self.geometry("450x650")
         self.al_completar_callback = al_completar_callback
         self.foto_bytes = None
+        self.fecha_comienzo_seleccionada = None
         
         self.transient(master.winfo_toplevel())
         self.after(100, self.grab_set)
@@ -32,6 +35,14 @@ class DialogoRegistrarAtleta(ctk.CTkToplevel):
         
         self.entry_telefono = ctk.CTkEntry(self.scroll, placeholder_text="Teléfono (Opcional)")
         self.entry_telefono.pack(fill="x", pady=5)
+        
+        # Fecha de Comienzo
+        self.frame_fecha = ctk.CTkFrame(self.scroll, fg_color="transparent")
+        self.frame_fecha.pack(fill="x", pady=10)
+        self.lbl_fecha = ctk.CTkLabel(self.frame_fecha, text="Sin fecha de inicio (Usará la de alta)")
+        self.lbl_fecha.pack(side="left")
+        self.btn_fecha = ctk.CTkButton(self.frame_fecha, text="🗓️ Elegir en Calendario", width=140, command=self.pedir_fecha)
+        self.btn_fecha.pack(side="right")
         
         # Foto
         self.btn_subir_foto = ctk.CTkButton(self.scroll, text="Seleccionar Foto de Perfil (Opcional)", command=self.seleccionar_foto)
@@ -66,6 +77,13 @@ class DialogoRegistrarAtleta(ctk.CTkToplevel):
                 messagebox.showerror("Error", f"No se pudo leer la imagen: {e}")
                 self.foto_bytes = None
 
+    def pedir_fecha(self):
+        def on_fecha_seleccionada(f):
+            self.fecha_comienzo_seleccionada = f
+            self.lbl_fecha.configure(text=f"Inicio: {f.strftime('%d/%m/%Y')}")
+            
+        DialogoSeleccionarFecha(self, on_fecha_seleccionada)
+
     def guardar(self):
         nombre = self.entry_nombre.get().strip()
         if not nombre:
@@ -76,6 +94,7 @@ class DialogoRegistrarAtleta(ctk.CTkToplevel):
             service = AtletasService(session)
             service.registrar_atleta(
                 nombre_completo=nombre,
+                fecha_comienzo=self.fecha_comienzo_seleccionada,
                 foto_perfil=self.foto_bytes,
                 email=self.entry_email.get().strip() or None,
                 telefono=self.entry_telefono.get().strip() or None,
@@ -95,6 +114,7 @@ class DialogoActualizarAtleta(ctk.CTkToplevel):
         self.atletas = {a.nombre_completo: a for a in atletas_activos}
         self.atleta_seleccionado_id = None
         self.foto_bytes = None
+        self.fecha_comienzo_seleccionada = None
 
         self.transient(master.winfo_toplevel())
         self.after(100, self.grab_set)
@@ -118,6 +138,14 @@ class DialogoActualizarAtleta(ctk.CTkToplevel):
         
         self.entry_telefono = ctk.CTkEntry(self.scroll, placeholder_text="Teléfono")
         self.entry_telefono.pack(fill="x", pady=5)
+        
+        # Fecha de Comienzo
+        self.frame_fecha = ctk.CTkFrame(self.scroll, fg_color="transparent")
+        self.frame_fecha.pack(fill="x", pady=10)
+        self.lbl_fecha = ctk.CTkLabel(self.frame_fecha, text="")
+        self.lbl_fecha.pack(side="left")
+        self.btn_fecha = ctk.CTkButton(self.frame_fecha, text="🗓️ Cambiar Comienzo", width=140, command=self.pedir_fecha)
+        self.btn_fecha.pack(side="right")
         
         self.btn_subir_foto = ctk.CTkButton(self.scroll, text="Cambiar Foto de Perfil", command=self.seleccionar_foto)
         self.btn_subir_foto.pack(fill="x", pady=10)
@@ -164,8 +192,19 @@ class DialogoActualizarAtleta(ctk.CTkToplevel):
         self.text_notas.delete("1.0", "end")
         self.text_notas.insert("1.0", atleta.notas_entrenador or "")
         
+        self.fecha_comienzo_seleccionada = atleta.fecha_comienzo
+        str_fecha = self.fecha_comienzo_seleccionada.strftime('%d/%m/%Y') if self.fecha_comienzo_seleccionada else "Sin fecha asignada"
+        self.lbl_fecha.configure(text=f"Inicio: {str_fecha}")
+        
         self.foto_bytes = None
         self.lbl_foto_status.configure(text="Manteniendo foto anterior...")
+
+    def pedir_fecha(self):
+        def on_fecha_seleccionada(f):
+            self.fecha_comienzo_seleccionada = f
+            self.lbl_fecha.configure(text=f"Nueva fecha inicio: {f.strftime('%d/%m/%Y')}")
+            
+        DialogoSeleccionarFecha(self, on_fecha_seleccionada, self.fecha_comienzo_seleccionada)
 
     def seleccionar_foto(self):
         ruta_archivo = filedialog.askopenfilename(filetypes=[("Imágenes", "*.png;*.jpg;*.jpeg")])
@@ -190,7 +229,8 @@ class DialogoActualizarAtleta(ctk.CTkToplevel):
             "email": self.entry_email.get().strip() or None,
             "telefono": self.entry_telefono.get().strip() or None,
             "objetivos": self.text_objetivos.get("1.0", "end-1c").strip() or None,
-            "notas_entrenador": self.text_notas.get("1.0", "end-1c").strip() or None
+            "notas_entrenador": self.text_notas.get("1.0", "end-1c").strip() or None,
+            "fecha_comienzo": self.fecha_comienzo_seleccionada
         }
         
         if self.foto_bytes is not None:

@@ -92,3 +92,11 @@ class DashboardService:
         except Exception as e:
             app_logger.error(f"Error al obtener llamadas: {e}")
             return []
+
+    def obtener_suscripciones_mes(self, anio: int, mes: int) -> list:
+        """Obtiene las suscripciones pendientes o programadas para el mes."""
+        try:
+            return self.repository.obtener_suscripciones_por_mes(anio, mes)
+        except Exception as e:
+            app_logger.error(f"Error al obtener suscripciones: {e}")
+            return []

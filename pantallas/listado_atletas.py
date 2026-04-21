@@ -122,7 +122,8 @@ class ListadoAtletas(ctk.CTkFrame):
             lbl_nombre = ctk.CTkLabel(frame_nombres, text=atleta.nombre_completo, font=ctk.CTkFont(size=18, weight="bold"))
             lbl_nombre.pack(anchor="w")
             
-            lbl_fecha = ctk.CTkLabel(frame_nombres, text=f"Comienzo del proceso: {atleta.fecha_alta.strftime('%d/%m/%Y')}", text_color="gray")
+            str_fecha = atleta.fecha_comienzo.strftime('%d/%m/%Y') if atleta.fecha_comienzo else "Sin asignar"
+            lbl_fecha = ctk.CTkLabel(frame_nombres, text=f"Comienzo del proceso: {str_fecha}", text_color="gray")
             lbl_fecha.pack(anchor="w")
             
             # Switch de reactivacion cuando es inactivo

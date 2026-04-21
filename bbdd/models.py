@@ -11,6 +11,7 @@ class Atleta(Base):
     email = Column(String, unique=True, index=True)
     telefono = Column(String)
     fecha_alta = Column(Date, default=datetime.date.today)
+    fecha_comienzo = Column(Date, nullable=True)
     estado = Column(String, default="activo") # "activo" o "inactivo"
     objetivos = Column(Text)
     notas_entrenador = Column(Text)
@@ -21,6 +22,7 @@ class Atleta(Base):
     formularios = relationship("FormularioSemanal", back_populates="atleta", cascade="all, delete-orphan")
     rutinas = relationship("Rutina", back_populates="atleta", cascade="all, delete-orphan")
     archivos = relationship("ArchivoSubido", back_populates="atleta", cascade="all, delete-orphan")
+    suscripciones = relationship("Suscripcion", back_populates="atleta", cascade="all, delete-orphan")
 
 class MetricaCorporal(Base):
     __tablename__ = "metricas_corporales"
@@ -132,3 +134,13 @@ class Llamada(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, nullable=False)
     fecha = Column(Date, nullable=False)
+
+class Suscripcion(Base):
+    __tablename__ = "suscripciones"
+
+    id = Column(Integer, primary_key=True, index=True)
+    atleta_id = Column(Integer, ForeignKey("atletas.id"))
+    fecha_renovacion = Column(Date, nullable=False)
+    estado = Column(String, default="pendiente") # "pendiente", "pagado", etc.
+
+    atleta = relationship("Atleta", back_populates="suscripciones")

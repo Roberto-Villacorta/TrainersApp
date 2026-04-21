@@ -133,7 +133,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         self.frame_calendario_main = ctk.CTkFrame(self, corner_radius=15)
         self.frame_calendario_main.pack(fill="x", padx=20, pady=(10, 20))
         
-        self.lbl_titulo_cal = ctk.CTkLabel(self.frame_calendario_main, text="Calendario de Llamadas", font=ctk.CTkFont(size=24, weight="bold"))
+        self.lbl_titulo_cal = ctk.CTkLabel(self.frame_calendario_main, text="Calendario Mensual (Llamadas & Cobros)", font=ctk.CTkFont(size=24, weight="bold"))
         self.lbl_titulo_cal.pack(pady=(20, 10))
         
         # Controles del calendario (mes/año)
@@ -176,16 +176,23 @@ class Dashboard(ctk.CTkScrollableFrame):
             btn.destroy()
         self.dias_botones.clear()
         
-        # Obtener las llamadas programadas para este mes
+        # Obtener las llamadas y pagos programados para este mes
         llamadas_mes = {}
+        suscripciones_mes = {}
         with SessionLocal() as session:
             ds = DashboardService(session)
             llamadas = ds.obtener_llamadas_mes(self.current_year, self.current_month)
             for ll in llamadas:
                 dia = ll.fecha.day
-                if dia not in llamadas_mes:
-                    llamadas_mes[dia] = []
+                if dia not in llamadas_mes: llamadas_mes[dia] = []
                 llamadas_mes[dia].append({"id": ll.id, "nombre": ll.nombre})
+                
+            suscripciones = ds.obtener_suscripciones_mes(self.current_year, self.current_month)
+            for s in suscripciones:
+                dia = s.fecha_renovacion.day
+                if dia not in suscripciones_mes: suscripciones_mes[dia] = []
+                # Si en el futuro se quiere acceder a informacion del pago, este listado guardaria el obj entero
+                suscripciones_mes[dia].append(s.atleta.nombre_completo)
         
         # Generar matriz del mes (días en 0 significan que pertenecen al mes anterior o siguiente)
         cal = calendar.monthcalendar(self.current_year, self.current_month)
@@ -197,12 +204,24 @@ class Dashboard(ctk.CTkScrollableFrame):
                     color_fondo = ("gray80", "gray25")
                     color_hover = ("gray70", "gray35")
                     
-                    if dia in llamadas_mes:
-                        # Extraer nombres
-                        nombres = [ll["nombre"] for ll in llamadas_mes[dia]]
+                    if dia in llamadas_mes or dia in suscripciones_mes:
+                        nombres = []
+                        if dia in llamadas_mes:
+                            nombres.extend([ll["nombre"] for ll in llamadas_mes[dia]])
+                        if dia in suscripciones_mes:
+                            nombres.extend([f"💸 {nombre}" for nombre in suscripciones_mes[dia]])
+                        
                         texto_boton += "\n" + "\n".join(nombres)
-                        color_fondo = ("#4a90e2", "#2b5c8f")
-                        color_hover = ("#357abd", "#1d4066")
+                        
+                        if dia in suscripciones_mes and dia not in llamadas_mes:
+                            color_fondo = ("#2e8c4a", "#1b5e20") # Verde
+                            color_hover = ("#3ba359", "#2e7d32")
+                        elif dia in llamadas_mes and dia not in suscripciones_mes:
+                            color_fondo = ("#4a90e2", "#2b5c8f") # Azul
+                            color_hover = ("#357abd", "#1d4066")
+                        else:
+                            color_fondo = ("#a06917", "#8c5607") # Mix Naranja
+                            color_hover = ("#b87f28", "#ab6c14")
 
                     btn_dia = ctk.CTkButton(
                         self.frame_grid_calendario, 

@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import extract
-from bbdd.models import Atleta, FormularioSemanal, Llamada
+from bbdd.models import Atleta, FormularioSemanal, Llamada, Suscripcion
 import datetime
 
 class DashboardRepository:
@@ -27,6 +27,13 @@ class DashboardRepository:
         return self.session.query(Llamada).filter(
             extract('year', Llamada.fecha) == anio,
             extract('month', Llamada.fecha) == mes
+        ).all()
+        
+    def obtener_suscripciones_por_mes(self, anio: int, mes: int) -> list[Suscripcion]:
+        return self.session.query(Suscripcion).join(Atleta).filter(
+            extract('year', Suscripcion.fecha_renovacion) == anio,
+            extract('month', Suscripcion.fecha_renovacion) == mes,
+            Atleta.estado == "activo"
         ).all()
 
     def eliminar_llamadas_por_fecha(self, fecha: datetime.date):
