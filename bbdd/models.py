@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text, LargeBinary
 from sqlalchemy.orm import relationship
 from bbdd.database import Base
 import datetime
@@ -14,6 +14,7 @@ class Atleta(Base):
     estado = Column(String, default="activo") # "activo" o "inactivo"
     objetivos = Column(Text)
     notas_entrenador = Column(Text)
+    foto_perfil = Column(LargeBinary, nullable=True)
 
     # Relaciones: Un atleta tiene muchas rutinas, formularios, etc.
     metricas = relationship("MetricaCorporal", back_populates="atleta", cascade="all, delete-orphan")
@@ -29,7 +30,6 @@ class MetricaCorporal(Base):
     fecha_medicion = Column(Date, default=datetime.date.today)
     peso_kg = Column(Float)
     porcentaje_grasa = Column(Float)
-    foto_progreso_ruta = Column(String)
 
     atleta = relationship("Atleta", back_populates="metricas")
 

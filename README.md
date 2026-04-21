@@ -1,3 +1,7 @@
+ctrl+shift+p para abrir la paleta de comandos
+iniciar un venv: python -m venv .venv
+activar un venv: .venv\Scripts\activate
+
 Tenemos una aplicación de escritorio desarrollada en python y tkinter para la capa de visualización.
 Las funcionalidades principales del sistema son:
     -quitarle esfuerzo a lo entrenadores de nuestra empresa con el seguimiento de sus atletas

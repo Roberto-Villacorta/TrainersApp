@@ -2,6 +2,9 @@ import customtkinter as ctk
 import sys
 from bbdd.crear_tablas import iniciar_base_datos
 from pantallas.dashboard import Dashboard
+from pantallas.listado_atletas import ListadoAtletas
+from pantallas.carga_rutinas import CargaRutinas
+from pantallas.ficha_atleta import FichaAtleta
 
 class MainApp(ctk.CTk):
     def __init__(self):
@@ -42,13 +45,14 @@ class MainApp(ctk.CTk):
         # 1. Instanciar Dashboard (ya implementado)
         self.pantallas["dashboard"] = Dashboard(self.contenedor_principal)
         
-        # 2. Instanciar Listado de Atletas (Placeholder por ahora)
-        self.pantallas["atletas"] = ctk.CTkFrame(self.contenedor_principal)
-        ctk.CTkLabel(self.pantallas["atletas"], text="Pantalla 'Listado de Atletas' en construcción", font=ctk.CTkFont(size=20)).pack(expand=True)
+        # 2. Instanciar Listado de Atletas
+        self.pantallas["atletas"] = ListadoAtletas(self.contenedor_principal, fg_color="transparent")
         
-        # 3. Instanciar Carga de Archivos (Placeholder por ahora)
-        self.pantallas["archivos"] = ctk.CTkFrame(self.contenedor_principal)
-        ctk.CTkLabel(self.pantallas["archivos"], text="Pantalla 'Carga de Archivos' en construcción", font=ctk.CTkFont(size=20)).pack(expand=True)
+        # 3. Instanciar Carga de Archivos
+        self.pantallas["archivos"] = CargaRutinas(self.contenedor_principal, fg_color="transparent")
+        
+        # 4. Instanciar Ficha Atleta
+        self.pantallas["ficha_atleta"] = FichaAtleta(self.contenedor_principal, master_app=self, fg_color="transparent")
         
         # Mostrar el dashboard por defecto al iniciar la app
         self.pantalla_actual = "dashboard"
@@ -65,17 +69,59 @@ class MainApp(ctk.CTk):
         if hasattr(self, "pantalla_actual") and self.pantalla_actual in self.pantallas:
             pantalla = self.pantallas[self.pantalla_actual]
             if hasattr(pantalla, "_parent_canvas"):
+                delta = 0
                 if sys.platform == "darwin" or sys.platform == "apple":
-                    pantalla._parent_canvas.yview_scroll(int(-1 * (event.delta)), "units")
+                    delta = int(-1 * event.delta)
                 elif sys.platform == "win32":
-                    pantalla._parent_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                    delta = int(-1 * (event.delta / 120))
                 else:
                     if event.num == 4:
-                        pantalla._parent_canvas.yview_scroll(-1, "units")
+                        delta = -1
                     elif event.num == 5:
-                        pantalla._parent_canvas.yview_scroll(1, "units")
+                        delta = 1
+                
+                self._iniciar_animacion_scroll(pantalla._parent_canvas, delta)
 
+    def _iniciar_animacion_scroll(self, canvas, delta):
+        if delta == 0:
+            return
+            
+        bbox = canvas.bbox("all")
+        if not bbox: return
+        altura_total = bbox[3] - bbox[1]
+        
+        # Evitamos cálculos irreales si el canvas no tiene altura
+        if altura_total == 0: return
+
+        # Regulamos los píxeles (100 pixeles de altura por cada clickcito en la rueda)
+        pixeles_por_scroll = 100 * delta
+        fraccion_total = pixeles_por_scroll / altura_total
+        
+        pasos = 15
+        fraccion_por_paso = fraccion_total / pasos
+        
+        def animar(paso):
+            if paso < pasos:
+                pos_actual = canvas.yview()[0]
+                nuevo_y = pos_actual + fraccion_por_paso
+                
+                if nuevo_y < 0.0: nuevo_y = 0.0
+                if nuevo_y > 1.0: nuevo_y = 1.0
+                
+                canvas.yview_moveto(nuevo_y)
+                self.after(10, animar, paso + 1)
+                
+        animar(0)
+
+    def mostrar_ficha_atleta(self, id_atleta):
+        self.pantallas["ficha_atleta"].cargar_atleta(id_atleta)
+        self.mostrar_pantalla("ficha_atleta")
+        
     def mostrar_pantalla(self, nombre_pantalla):
+        # Si venimos a la pantalla de atletas, refrescar por si hay cambios
+        if nombre_pantalla == "atletas" and hasattr(self.pantallas["atletas"], "renderizar_lista"):
+            self.pantallas["atletas"].renderizar_lista()
+            
         self.pantalla_actual = nombre_pantalla
         # 1. Ocultar todas las pantallas
         for pantalla in self.pantallas.values():
