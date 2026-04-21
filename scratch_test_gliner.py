@@ -13,16 +13,15 @@ from logica.ia_service import GlinerService
 # CASOS DE PRUEBA
 # ──────────────────────────────────────────────
 test_cases = [
-    # Formato tabular con rango "num-num" como intervalo de trabajo
-    "Ejercicio\tRango\tSerie 1\tSerie 2\tSerie 3\n"
-    "Dom\t30\t5 x 30\t4 x 30\t4 x 30\n"
-    "Remo\t10-12\t11 x 110\t10 x 110\t\n"
-    "P. Incl\t5-8\t7 x 90\t5 x 90\t5 x 90\n"
-    "P. Plano\t12-15\t14 x 46\t14 x 46\t\n"
-    "Elev. Lat\t12-15\t15 x 20\t15 x 20\t13 x 20\n"
-    "Pajaro\t15-18\t18 x 20\t18 x 20\t16 x 20\n"
-    "Curl Predic\t8-10\t10 x 37,5\t8 x 37,5\t8 x 37,5\n"
-    "Exten. Tras\t8-10\t10 x 80\t10 x 80\t10 x 80",
+    # OCR manual de la imagen (cuaderno de entreno - Mesoaldo 9, Semana 55, Sesion 71)
+    "Ejercicio\tRango\tSerie 1\tSerie 2\tSerie 3\tSerie 4\n"
+    "P. Plan\t7-12\t3x120\t10x100\t9x100\t8x100\n"
+    "Remo\t6-10\t5x120\t10x110\t9x115\t8x115\n"
+    "Mat cont\t11-20\t20x42,5\t19x42,5\t\t\n"
+    "T don\t8-10\t10x110\t9x110\t\t\n"
+    "Elev lat\t20-25\t27x13,75\t24x13,75\t20x13,75\t\n"
+    "Curl bien\t9-14\t15x17,5\t18x17,5\t1x18,75\t8x20\n"
+    "Kckton\t12-15\t17x16,11\t17x15,75\t15x18,75\t",
 ]
 
 # ──────────────────────────────────────────────

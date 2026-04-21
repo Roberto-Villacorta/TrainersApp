@@ -13,28 +13,33 @@ os.environ["HF_HOME"] = MODEL_DIR
 # Extend este diccionario libremente con los términos de tu sistema
 # ─────────────────────────────────────────────────────────────────
 ABREVIATURAS = {
-    # Ejercicios con punto (se reemplazan como cadena literal)
+    # Ejercicios con punto o espacio (se reemplazan como cadena literal)
     "p. incl":    "press inclinado",
+    "p. plan":    "press plano",
     "p. plano":   "press plano",
     "elev. lat":  "elevaciones laterales",
+    "elev lat":   "elevaciones laterales",
     "curl predic":"curl predicador",
+    "curl bien":  "curl predicador",
     "exten. tras":"extensiones trasnuca",
     "ext. tras":  "extensiones trasnuca",
     "ext. tric":  "extensiones triceps",
+    "mat cont":   "martillo continuo",
+    "t don":      "tiron dominadas",
     # Ejercicios con word-boundary
-    "dom":   "dominadas",
-    "pajaro":"pajaro",          # sin tilde para OCR
-    "sent":  "sentadilla",
-    "pm":    "peso muerto",
-    "pes":   "peso muerto",
-    "remo":  "remo",
+    "dom":    "dominadas",
+    "pajaro": "pajaro",
+    "sent":   "sentadilla",
+    "pm":     "peso muerto",
+    "pes":    "peso muerto",
+    "remo":   "remo",
+    "kckton": "patada triceps",
     # Genéricos
-    "dsc":   "descanso",
-    "desc":  "descanso",
-    "reps":  "repeticiones",
-    "rep":   "repeticiones",
-    "ser":   "series",
-    "kg":    "kg",
+    "dsc":  "descanso",
+    "desc": "descanso",
+    "reps": "repeticiones",
+    "rep":  "repeticiones",
+    "ser":  "series",
 }
 
 def _expandir_abreviaturas(texto: str) -> str:
