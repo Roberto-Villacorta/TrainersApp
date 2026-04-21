@@ -65,6 +65,29 @@ def _es_tabla(texto: str) -> bool:
     con_tab = sum(1 for l in lineas if '\t' in l)
     return con_tab >= len(lineas) // 2
 
+def _extraer_metadatos(texto: str) -> dict:
+    """
+    Busca en el texto las etiquetas de mesociclo, semana y sesion
+    que el entrenador escribe encima de la tabla.
+    Acepta variaciones: 'Mesociclo 9', 'Mesociclo9', 'Semana 55', 'Sesion 71', 'Sesion P1', etc.
+    """
+    texto_lower = texto.lower()
+    meta = {"mesociclo": None, "semana": None, "sesion": None}
+
+    m = re.search(r'mesociclo\s*(\w+)', texto_lower)
+    if m:
+        meta["mesociclo"] = m.group(1)
+
+    s = re.search(r'semana\s*(\w+)', texto_lower)
+    if s:
+        meta["semana"] = s.group(1)
+
+    se = re.search(r'sesi[oó]n\s*([\w]+)', texto_lower)
+    if se:
+        meta["sesion"] = se.group(1)
+
+    return meta
+
 def _parsear_tabla(texto: str) -> list[dict]:
     """
     Parsea texto en formato tabla (separado por tabuladores).
@@ -91,6 +114,10 @@ def _parsear_tabla(texto: str) -> list[dict]:
         nombre_raw = columnas[0].strip()
         if not nombre_raw:
             continue
+        
+        # Saltar la fila de cabecera de columnas ("Ejercicio", "Rango", "Serie 1"...)
+        if nombre_raw.lower() in ("ejercicio", "exercise"):
+            continue
 
         nombre_expandido = _expandir_abreviaturas(nombre_raw.lower()).strip().title()
         rango = columnas[1].strip() if len(columnas) > 1 else "—"
@@ -111,6 +138,13 @@ def _parsear_tabla(texto: str) -> list[dict]:
             "series": series,
             "origen": "tabla"
         })
+
+    # Adjuntar metadatos a cada ejercicio
+    meta = _extraer_metadatos(texto)
+    for r in resultados:
+        r["mesociclo"] = meta["mesociclo"]
+        r["semana"]    = meta["semana"]
+        r["sesion"]    = meta["sesion"]
 
     return resultados
 

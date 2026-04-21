@@ -14,6 +14,7 @@ from logica.ia_service import GlinerService
 # ──────────────────────────────────────────────
 test_cases = [
     # OCR manual imagen 1 (Mesoaldo 9, Semana 55, Sesion 71)
+    "Mesociclo 9\tSemana 55\tSesion 71\n"
     "Ejercicio\tRango\tSerie 1\tSerie 2\tSerie 3\tSerie 4\n"
     "P. Plan\t7-12\t3x120\t10x100\t9x100\t8x100\n"
     "Remo\t6-10\t5x120\t10x110\t9x115\t8x115\n"
@@ -23,7 +24,8 @@ test_cases = [
     "Curl bien\t9-14\t15x17,5\t18x17,5\t1x18,75\t8x20\n"
     "Kckton\t12-15\t17x16,11\t17x15,75\t15x18,75\t",
 
-    # OCR manual imagen 2 (Mesoaldo 9, Semana 51, Sesion P1)
+    # OCR manual imagen 2 (Mesociclo 9, Semana 51, Sesion P1)
+    "Mesociclo 9\tSemana 51\tSesion P1\n"
     "Ejercicio\tRango\tSerie 1\tSerie 2\tSerie 3\tSerie 4\n"
     "Ext acl\t8-10\t10x40\t10x40\t10x70\t10x47,5\n"
     "Sentadll\t1-3/5-8\t3x120\t3x125\t8x100\t\n"
@@ -86,7 +88,12 @@ for i, (desc, texto) in enumerate(casos_normalizados, 1):
             # Detectar si es salida de parser tabular o de GLiNER
             if resultados and "ejercicio" in resultados[0]:
                 # Formato tabular estructurado
-                print(f"  Modo: PARSER TABULAR ({len(resultados)} ejercicios encontrados)\n")
+                print(f"  Modo: PARSER TABULAR ({len(resultados)} ejercicios encontrados)")
+                # Mostrar metadatos si existen
+                meta = resultados[0]
+                if meta.get("mesociclo") or meta.get("semana") or meta.get("sesion"):
+                    print(f"  Mesociclo: {meta.get('mesociclo','—')}  |  Semana: {meta.get('semana','—')}  |  Sesion: {meta.get('sesion','—')}")
+                print()
                 for ej in resultados:
                     total_extraidos += 1
                     rango = ej['rango_objetivo']
