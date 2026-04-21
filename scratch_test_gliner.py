@@ -13,42 +13,16 @@ from logica.ia_service import GlinerService
 # CASOS DE PRUEBA
 # ──────────────────────────────────────────────
 test_cases = [
-    (
-        "Texto limpio - formato natural",
-        "Press de Banca 4 series de 10 repeticiones con 60kg, descanso de 90 segundos."
-    ),
-    (
-        "Texto caotico - OCR defectuoso con mayusculas mixtas",
-        "EJERciI0 3 Sentadillas bUlgAraS 3x12 15kg p/mano 1 min dsc."
-    ),
-    (
-        "Notacion resumida con abreviaturas",
-        "Curl biceps barra Z: 4s x 8r (30kg) - 60s descanso"
-    ),
-    (
-        "Multiples ejercicios en bloque",
-        "Rutina de hoy:\nPeso muerto 5x5 a 100 kilos. descansa 2 minutos.\nRemo en polea baja 4x10-12 reps 40kg."
-    ),
-    (
-        "Formato lista numerada clasica",
-        "1. Sentadilla libre: 5 series x 8 repeticiones, 80 kg. Descanso: 3 min\n"
-        "2. Prensa de piernas: 4x15, 120kg. Desc: 90seg\n"
-        "3. Extensiones de cuadriceps: 3 series de 12 reps con 40 kilos"
-    ),
-    (
-        "Slang y errores tipograficos",
-        "pressbanc 5ser 8rep 70k decnso 2m\n"
-        "dominadas asistidas 4x6 lastre 10kg"
-    ),
-    (
-        "Cardio sin pesos",
-        "Caminata inclinada 5 series de 3 minutos al 8% de pendiente. Descanso 1 min entre series."
-    ),
-    (
-        "Notas a mano muy informales",
-        "hombros - press militar(mancuernas) : 4 tandas de 10-12 rep x 22kg cada mano\n"
-        "elevaciones laterales 3x15 con 10kg desc 45 seg"
-    ),
+    # Formato tabular con rango "num-num" como intervalo de trabajo
+    "Ejercicio\tRango\tSerie 1\tSerie 2\tSerie 3\n"
+    "Dom\t30\t5 x 30\t4 x 30\t4 x 30\n"
+    "Remo\t10-12\t11 x 110\t10 x 110\t\n"
+    "P. Incl\t5-8\t7 x 90\t5 x 90\t5 x 90\n"
+    "P. Plano\t12-15\t14 x 46\t14 x 46\t\n"
+    "Elev. Lat\t12-15\t15 x 20\t15 x 20\t13 x 20\n"
+    "Pajaro\t15-18\t18 x 20\t18 x 20\t16 x 20\n"
+    "Curl Predic\t8-10\t10 x 37,5\t8 x 37,5\t8 x 37,5\n"
+    "Exten. Tras\t8-10\t10 x 80\t10 x 80\t10 x 80",
 ]
 
 # ──────────────────────────────────────────────
@@ -72,26 +46,72 @@ serv = GlinerService()
 total_extraidos = 0
 tests_ok = 0
 
-for i, (desc, texto) in enumerate(test_cases, 1):
+# Normalizar entradas: acepta tanto (desc, texto) como texto plano directo
+casos_normalizados = []
+for c in test_cases:
+    if isinstance(c, tuple):
+        if len(c) == 2:
+            casos_normalizados.append(c)
+        else:
+            casos_normalizados.append((f"Caso {len(casos_normalizados)+1}", c[0]))
+    else:
+        casos_normalizados.append((f"Caso {len(casos_normalizados)+1}", c))
+
+for i, (desc, texto) in enumerate(casos_normalizados, 1):
     print("\n" + SEP_MED)
-    print(f"  TEST {i}/{len(test_cases)}: {desc}")
+    print(f"  TEST {i}/{len(casos_normalizados)}: {desc}")
     print(SEP_MED)
-    input_preview = texto[:90].replace("\n", " | ")
-    print(f"  Input: {input_preview}{'...' if len(texto) > 90 else ''}")
+    # Mostrar el texto completo si es corto, sino preview linea a linea
+    lineas = texto.strip().splitlines()
+    for linea in lineas[:6]:
+        print(f"  | {linea.strip()}")
+    if len(lineas) > 6:
+        print(f"  | ... ({len(lineas)-6} lineas mas)")
     print()
 
     try:
         resultados = serv.procesar_texto_rutina(texto)
-        if resultados:
-            tests_ok += 1
-            for r in resultados:
-                total_extraidos += 1
-                nivel = nivel_confianza(r['confianza'])
-                print(f"  {nivel} [{r['tipo'].upper()}] -> '{r['texto']}' (conf: {r['confianza']})")
+        if not resultados:
+            print("  [WARN] Sin entidades detectadas.")
         else:
-            print("  [WARN] Sin entidades detectadas (por encima del umbral de confianza).")
+            tests_ok += 1
+            # Detectar si es salida de parser tabular o de GLiNER
+            if resultados and "ejercicio" in resultados[0]:
+                # Formato tabular estructurado
+                print(f"  Modo: PARSER TABULAR ({len(resultados)} ejercicios encontrados)\n")
+                for ej in resultados:
+                    total_extraidos += 1
+                    rango = ej['rango_objetivo']
+                    if '-' in str(rango):
+                        rango_str = f"intervalo {rango} reps"
+                    else:
+                        rango_str = f"objetivo {rango} reps"
+                    print(f"  [EJERCICIO] {ej['ejercicio']}  ({rango_str})")
+                    if ej['series']:
+                        for s_num, s in enumerate(ej['series'], 1):
+                            print(f"             Serie {s_num}: {s['reps']} reps x {s['peso_kg']} kg")
+                    else:
+                        print("             (sin series detectadas)")
+                    print()
+            else:
+                # Formato GLiNER libre
+                print(f"  Modo: GLINER  ({len(resultados)} entidades encontradas)\n")
+                for r in resultados:
+                    total_extraidos += 1
+                    if r['confianza'] >= 0.75:
+                        nivel = "[ALTO] "
+                    elif r['confianza'] >= 0.5:
+                        nivel = "[MEDIO]"
+                    else:
+                        nivel = "[BAJO] "
+                    print(f"  {nivel} [{r['tipo'].upper()}] -> '{r['texto']}' (conf: {r['confianza']})")
     except Exception as e:
         print(f"  [ERROR] {e}")
+        import traceback; traceback.print_exc()
+
+
+# Actualizar total para el resumen
+test_cases = casos_normalizados
 
 print("\n" + SEP)
 print("  RESUMEN FINAL")

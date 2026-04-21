@@ -8,60 +8,158 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR = os.path.join(BASE_DIR, "modelos_ia")
 os.environ["HF_HOME"] = MODEL_DIR
 
+# ─────────────────────────────────────────────────────────────────
+# Diccionario de abreviaturas comunes de gimnasio
+# Extend este diccionario libremente con los términos de tu sistema
+# ─────────────────────────────────────────────────────────────────
+ABREVIATURAS = {
+    # Ejercicios con punto (se reemplazan como cadena literal)
+    "p. incl":    "press inclinado",
+    "p. plano":   "press plano",
+    "elev. lat":  "elevaciones laterales",
+    "curl predic":"curl predicador",
+    "exten. tras":"extensiones trasnuca",
+    "ext. tras":  "extensiones trasnuca",
+    "ext. tric":  "extensiones triceps",
+    # Ejercicios con word-boundary
+    "dom":   "dominadas",
+    "pajaro":"pajaro",          # sin tilde para OCR
+    "sent":  "sentadilla",
+    "pm":    "peso muerto",
+    "pes":   "peso muerto",
+    "remo":  "remo",
+    # Genéricos
+    "dsc":   "descanso",
+    "desc":  "descanso",
+    "reps":  "repeticiones",
+    "rep":   "repeticiones",
+    "ser":   "series",
+    "kg":    "kg",
+}
+
+def _expandir_abreviaturas(texto: str) -> str:
+    """Expande abreviaturas a términos completos para mejorar comprensión del modelo."""
+    for abrev, completo in ABREVIATURAS.items():
+        if "." in abrev or " " in abrev:
+            texto = texto.replace(abrev, completo)
+        else:
+            texto = re.sub(fr'\b{re.escape(abrev)}\b', completo, texto)
+    return texto
+
+def _es_tabla(texto: str) -> bool:
+    """Detecta si el texto tiene formato tabular (contiene tabs o columnas separadas por espacios múltiples)."""
+    lineas = [l for l in texto.strip().splitlines() if l.strip()]
+    if len(lineas) < 2:
+        return False
+    # Si más de la mitad de las líneas contienen tabuladores, es tabla
+    con_tab = sum(1 for l in lineas if '\t' in l)
+    return con_tab >= len(lineas) // 2
+
+def _parsear_tabla(texto: str) -> list[dict]:
+    """
+    Parsea texto en formato tabla (separado por tabuladores).
+    Formato esperado:
+        Ejercicio  Rango   Serie1   Serie2   Serie3
+        Dom        30      5 x 30   4 x 30   4 x 30
+    
+    Devuelve una lista de dicts con ejercicio, rango y lista de series {reps, peso}.
+    """
+    lineas = [l for l in texto.strip().splitlines() if l.strip()]
+    resultados = []
+
+    # Saltar la cabecera (primera línea)
+    datos = lineas[1:]
+
+    # Regex para capturar "REP x PESO" o "REP X PESO" o "REP x PESO,5"
+    patron_serie = re.compile(r'(\d+)\s*[xX]\s*([\d.,]+)', re.IGNORECASE)
+
+    for linea in datos:
+        columnas = re.split(r'\t+', linea.strip())
+        if not columnas:
+            continue
+
+        nombre_raw = columnas[0].strip()
+        if not nombre_raw:
+            continue
+
+        nombre_expandido = _expandir_abreviaturas(nombre_raw.lower()).strip().title()
+        rango = columnas[1].strip() if len(columnas) > 1 else "—"
+
+        series = []
+        for celda in columnas[2:]:
+            celda = celda.strip()
+            match = patron_serie.search(celda)
+            if match:
+                reps = int(match.group(1))
+                peso_str = match.group(2).replace(",", ".")
+                peso = float(peso_str)
+                series.append({"reps": reps, "peso_kg": peso})
+
+        resultados.append({
+            "ejercicio": nombre_expandido,
+            "rango_objetivo": rango,
+            "series": series,
+            "origen": "tabla"
+        })
+
+    return resultados
+
 class GlinerService:
     _modelo = None
 
     def __init__(self):
         """Inicializa el modelo GLiNER de forma perezosa (Lazy Load) para no bloquear el inicio de la app."""
-        # Balance entre labels cortos y descriptivos para maximizar precision
         self.labels = [
             "ejercicio",
             "series",
             "repeticiones",
-            "peso en kg o kg",
+            "peso en kg",
             "descanso",
         ]
-        self.model_name = "urchade/gliner_multi-v2.1"  # Modelo multilenguaje robusto
+        self.model_name = "urchade/gliner_multi-v2.1"
 
     def cargar_modelo(self):
         if GlinerService._modelo is None:
-            app_logger.info(f"Cargando modelo GLiNER ({self.model_name}) en memoria. Esto puede tardar la primera vez si se está descargando en {MODEL_DIR}...")
+            app_logger.info(f"Cargando modelo GLiNER ({self.model_name}) en {MODEL_DIR}...")
             try:
-                # Al cargar el modelo, los binarios se alojarán automáticamente en 'modelos_ia' por la variable HF_HOME
                 GlinerService._modelo = GLiNER.from_pretrained(self.model_name)
                 app_logger.info("Modelo GLiNER cargado correctamente.")
             except Exception as e:
                 app_logger.error(f"Error cargando GLiNER: {e}")
                 raise e
 
-    def procesar_texto_rutina(self, texto_ocr: str):
-        """
-        Toma texto caótico (salida de un OCR) y devuelve una lista estructurada
-        de parámetros de fitness (ejercicio, series, reps...).
-        """
+    def _procesar_texto_libre(self, texto: str) -> list[dict]:
+        """Usa GLiNER para extraer entidades de texto no estructurado."""
         self.cargar_modelo()
-        
-        # Preprocesado: normalizar texto caotico de OCR
-        texto_limpio = texto_ocr.lower()
-        # Reemplazos con word boundaries para no alterar subpalabras
-        texto_limpio = re.sub(r'\bdsc\b', 'descanso', texto_limpio)
-        texto_limpio = re.sub(r'\bdesc\b', 'descanso', texto_limpio)
-        texto_limpio = re.sub(r'\breps\b', 'repeticiones', texto_limpio)
-        texto_limpio = re.sub(r'\brep\b', 'repeticiones', texto_limpio)
-        texto_limpio = re.sub(r'(\d+)x(\d)', r'\1 series de \2', texto_limpio)  # "4x10" -> "4 series de 10"
+
+        texto_limpio = texto.lower()
+        texto_limpio = _expandir_abreviaturas(texto_limpio)
+        # Normalizar "NxM" -> "N repeticiones con M kg"
+        texto_limpio = re.sub(r'(\d+)\s*[xX]\s*([\d.,]+)', r'\1 repeticiones con \2 kg', texto_limpio)
         texto_limpio = re.sub(r'\bp/mano\b', 'por mano', texto_limpio)
 
-        app_logger.info("Analizando texto OCR con GLiNER...")
+        app_logger.info("Analizando texto libre con GLiNER...")
         entidades = GlinerService._modelo.predict_entities(texto_limpio, self.labels)
-        
-        # Filtrado básico por score o empaquetado de resultados
-        resultados_limpios = []
-        for entity in entidades:
-            if entity["score"] > 0.4:  # Umbral de confianza
-                resultados_limpios.append({
-                    "tipo": entity["label"],
-                    "texto": entity["text"],
-                    "confianza": round(entity["score"], 2)
-                })
-                
-        return resultados_limpios
+
+        return [
+            {
+                "tipo": e["label"],
+                "texto": e["text"],
+                "confianza": round(e["score"], 2),
+                "origen": "gliner"
+            }
+            for e in entidades if e["score"] > 0.4
+        ]
+
+    def procesar_texto_rutina(self, texto_ocr: str):
+        """
+        Punto de entrada principal.
+        - Si el texto es tabular: lo parsea directamente (precisión 100%).
+        - Si es texto libre: usa GLiNER para NER.
+        Devuelve siempre una lista de dicts con los datos extraídos.
+        """
+        if _es_tabla(texto_ocr):
+            app_logger.info("Formato tabular detectado. Usando parser directo.")
+            return _parsear_tabla(texto_ocr)
+        else:
+            return self._procesar_texto_libre(texto_ocr)
