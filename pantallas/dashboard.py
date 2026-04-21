@@ -167,6 +167,15 @@ class Dashboard(ctk.CTkScrollableFrame):
         self.dias_botones = []
         self.actualizar_calendario()
 
+    def actualizar_dashboard(self):
+        with SessionLocal() as session:
+            dashboard_service = DashboardService(session)
+            metricas = dashboard_service.obtener_metricas_dashboard()
+            
+        self.lbl_num_atletas.configure(text=str(metricas["atletas_activos"]))
+        self.lbl_num_forms.configure(text=str(metricas["formularios_pendientes"]))
+        self.actualizar_calendario()
+
     def actualizar_calendario(self):
         meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
         self.lbl_mes_anio.configure(text=f"{meses[self.current_month-1]} {self.current_year}")

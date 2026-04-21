@@ -122,6 +122,10 @@ class MainApp(ctk.CTk):
         if nombre_pantalla == "atletas" and hasattr(self.pantallas["atletas"], "renderizar_lista"):
             self.pantallas["atletas"].renderizar_lista()
             
+        # Si volvemos al dashboard, refrescar las metricas y el calendario
+        if nombre_pantalla == "dashboard" and hasattr(self.pantallas["dashboard"], "actualizar_dashboard"):
+            self.pantallas["dashboard"].actualizar_dashboard()
+            
         self.pantalla_actual = nombre_pantalla
         # 1. Ocultar todas las pantallas
         for pantalla in self.pantallas.values():
