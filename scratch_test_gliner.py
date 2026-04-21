@@ -13,7 +13,7 @@ from logica.ia_service import GlinerService
 # CASOS DE PRUEBA
 # ──────────────────────────────────────────────
 test_cases = [
-    # OCR manual imagen 1 (Mesoaldo 9, Semana 55, Sesion 71)
+    # OCR manual imagen 1 (Mesociclo 9, Semana 55, Sesion 71)
     "Mesociclo 9\tSemana 55\tSesion 71\n"
     "Ejercicio\tRango\tSerie 1\tSerie 2\tSerie 3\tSerie 4\n"
     "P. Plan\t7-12\t3x120\t10x100\t9x100\t8x100\n"
