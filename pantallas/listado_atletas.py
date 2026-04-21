@@ -84,7 +84,7 @@ class ListadoAtletas(ctk.CTkFrame):
             atletas = service.obtener_atletas(estado=estado_req)
             
         if not atletas:
-            msg = "No hay atletas inactivos." if self.viendo_inactivos else "No hay atletas activos. ¡Registra uno!"
+            msg = "No hay atletas inactivos." if self.viendo_inactivos else "No hay atletas activos. ¡Registra tú primer cliente!"
             ctk.CTkLabel(self.frame_lista, text=msg, font=ctk.CTkFont(size=16)).pack(pady=40)
             return
             

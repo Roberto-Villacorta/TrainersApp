@@ -33,7 +33,7 @@ class DialogoRegistrarAtleta(ctk.CTkToplevel):
         self.entry_email = ctk.CTkEntry(self.scroll, placeholder_text="Correo Electrónico (Opcional)")
         self.entry_email.pack(fill="x", pady=5)
         
-        self.entry_telefono = ctk.CTkEntry(self.scroll, placeholder_text="Teléfono (Opcional)")
+        self.entry_telefono = ctk.CTkEntry(self.scroll, placeholder_text="Teléfono de contacto (Opcional)")
         self.entry_telefono.pack(fill="x", pady=5)
         
         # Fecha de Comienzo
@@ -51,7 +51,7 @@ class DialogoRegistrarAtleta(ctk.CTkToplevel):
         self.lbl_foto_status = ctk.CTkLabel(self.scroll, text="Ninguna foto seleccionada")
         self.lbl_foto_status.pack()
         
-        self.lbl_obj = ctk.CTkLabel(self.scroll, text="Objetivos:", anchor="w")
+        self.lbl_obj = ctk.CTkLabel(self.scroll, text="Objetivos de tu atleta:", anchor="w")
         self.lbl_obj.pack(fill="x", pady=(10, 0))
         self.text_objetivos = ctk.CTkTextbox(self.scroll, height=80)
         self.text_objetivos.pack(fill="x", pady=5)

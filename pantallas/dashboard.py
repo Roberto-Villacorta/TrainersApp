@@ -133,7 +133,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         self.frame_calendario_main = ctk.CTkFrame(self, corner_radius=15)
         self.frame_calendario_main.pack(fill="x", padx=20, pady=(10, 20))
         
-        self.lbl_titulo_cal = ctk.CTkLabel(self.frame_calendario_main, text="Calendario Mensual (Llamadas & Cobros)", font=ctk.CTkFont(size=24, weight="bold"))
+        self.lbl_titulo_cal = ctk.CTkLabel(self.frame_calendario_main, text="Calendario de reservas y fechas de pago", font=ctk.CTkFont(size=24, weight="bold"))
         self.lbl_titulo_cal.pack(pady=(20, 10))
         
         # Controles del calendario (mes/año)
@@ -269,7 +269,7 @@ class Dashboard(ctk.CTkScrollableFrame):
             return
 
         # Comportamiento si no hay llamadas
-        dialog = ctk.CTkInputDialog(text=f"Agendar llamada para el {dia}/{self.current_month}/{self.current_year}:", title="Nueva Llamada")
+        dialog = ctk.CTkInputDialog(text=f"Agendar la llamada para el {dia}/{self.current_month}/{self.current_year}:", title="Nueva Llamada")
         llamada = dialog.get_input()
         if llamada:
             with SessionLocal() as session:
