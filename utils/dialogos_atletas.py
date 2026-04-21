@@ -39,7 +39,7 @@ class DialogoRegistrarAtleta(ctk.CTkToplevel):
         # Fecha de Comienzo
         self.frame_fecha = ctk.CTkFrame(self.scroll, fg_color="transparent")
         self.frame_fecha.pack(fill="x", pady=10)
-        self.lbl_fecha = ctk.CTkLabel(self.frame_fecha, text="Sin fecha de inicio (Usará la de alta)")
+        self.lbl_fecha = ctk.CTkLabel(self.frame_fecha, text="Esperando fecha de inicio...")
         self.lbl_fecha.pack(side="left")
         self.btn_fecha = ctk.CTkButton(self.frame_fecha, text="🗓️ Elegir en Calendario", width=140, command=self.pedir_fecha)
         self.btn_fecha.pack(side="right")
