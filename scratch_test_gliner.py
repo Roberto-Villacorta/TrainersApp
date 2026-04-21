@@ -13,7 +13,7 @@ from logica.ia_service import GlinerService
 # CASOS DE PRUEBA
 # ──────────────────────────────────────────────
 test_cases = [
-    # OCR manual de la imagen (cuaderno de entreno - Mesoaldo 9, Semana 55, Sesion 71)
+    # OCR manual imagen 1 (Mesoaldo 9, Semana 55, Sesion 71)
     "Ejercicio\tRango\tSerie 1\tSerie 2\tSerie 3\tSerie 4\n"
     "P. Plan\t7-12\t3x120\t10x100\t9x100\t8x100\n"
     "Remo\t6-10\t5x120\t10x110\t9x115\t8x115\n"
@@ -22,6 +22,15 @@ test_cases = [
     "Elev lat\t20-25\t27x13,75\t24x13,75\t20x13,75\t\n"
     "Curl bien\t9-14\t15x17,5\t18x17,5\t1x18,75\t8x20\n"
     "Kckton\t12-15\t17x16,11\t17x15,75\t15x18,75\t",
+
+    # OCR manual imagen 2 (Mesoaldo 9, Semana 51, Sesion P1)
+    "Ejercicio\tRango\tSerie 1\tSerie 2\tSerie 3\tSerie 4\n"
+    "Ext acl\t8-10\t10x40\t10x40\t10x70\t10x47,5\n"
+    "Sentadll\t1-3/5-8\t3x120\t3x125\t8x100\t\n"
+    "Abductor\t11-20\t20x85\t20x85\t15x85\t8x160\n"
+    "Aductor\t20-21\t21x70\t21x70\t21x70\t\n"
+    "Gom\t21-30\t30x60\t30x60\t26x30\t\n"
+    "Pres millo\t10-12\t8x27\t11x30\t11x30\t",
 ]
 
 # ──────────────────────────────────────────────
