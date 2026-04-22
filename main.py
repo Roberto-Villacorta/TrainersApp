@@ -118,13 +118,25 @@ class MainApp(ctk.CTk):
         self.mostrar_pantalla("ficha_atleta")
         
     def mostrar_pantalla(self, nombre_pantalla):
-        # Si venimos a la pantalla de atletas, refrescar por si hay cambios
-        if nombre_pantalla == "atletas" and hasattr(self.pantallas["atletas"], "renderizar_lista"):
-            self.pantallas["atletas"].renderizar_lista()
-            
-        # Si volvemos al dashboard, refrescar las metricas y el calendario
-        if nombre_pantalla == "dashboard" and hasattr(self.pantallas["dashboard"], "actualizar_dashboard"):
-            self.pantallas["dashboard"].actualizar_dashboard()
+        # 1. Refrescar datos según la pantalla de destino
+        if nombre_pantalla == "atletas":
+            if hasattr(self.pantallas["atletas"], "renderizar_lista"):
+                self.pantallas["atletas"].renderizar_lista()
+                
+        elif nombre_pantalla == "dashboard":
+            if hasattr(self.pantallas["dashboard"], "actualizar_dashboard"):
+                self.pantallas["dashboard"].actualizar_dashboard()
+                
+        elif nombre_pantalla == "archivos":
+            # Refrescar lista de atletas en el combo de carga de rutinas
+            if hasattr(self.pantallas["archivos"], "cargar_atletas"):
+                self.pantallas["archivos"].cargar_atletas()
+                
+        elif nombre_pantalla == "ficha_atleta":
+            # Si ya hay un atleta cargado, refrescar sus datos por si hubo cambios en otros módulos
+            atleta_id = getattr(self.pantallas["ficha_atleta"], "id_atleta_actual", None)
+            if atleta_id and hasattr(self.pantallas["ficha_atleta"], "cargar_atleta"):
+                self.pantallas["ficha_atleta"].cargar_atleta(atleta_id)
             
         self.pantalla_actual = nombre_pantalla
         # 1. Ocultar todas las pantallas

@@ -47,3 +47,44 @@ class DashboardRepository:
         if llamada:
             llamada.nombre = nuevo_nombre
         return llamada
+
+class RoutineRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def guardar_rutina_completa(self, atleta_id: int, nombre_rutina: str, ejercicios_data: list) -> bool:
+        """
+        Crea una rutina y todos sus ejercicios en una transacción.
+        """
+        try:
+            from bbdd.models import Rutina, EjercicioRutina
+            
+            # 1. Crear la cabecera de la rutina
+            nueva_rutina = Rutina(
+                atleta_id=atleta_id,
+                nombre_rutina=nombre_rutina,
+                fecha_asignacion=datetime.date.today(),
+                activa=True
+            )
+            self.session.add(nueva_rutina)
+            self.session.flush() # Para obtener el id de la rutina
+            
+            # 2. Añadir los ejercicios
+            for ej in ejercicios_data:
+                # El mapeo depende de la salida del parser
+                nuevo_ej = EjercicioRutina(
+                    rutina_id=nueva_rutina.id,
+                    nombre_ejercicio=ej.get("nombre_ejercicio", "Desconocido"),
+                    series=str(ej.get("series", "")),
+                    repeticiones=str(ej.get("repeticiones", "")),
+                    peso_objetivo=str(ej.get("peso_objetivo", "")),
+                    tiempo_descanso=str(ej.get("tiempo_descanso", ""))
+                )
+                self.session.add(nuevo_ej)
+            
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"Error guardando rutina: {e}")
+            return False
