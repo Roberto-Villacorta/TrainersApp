@@ -384,6 +384,9 @@ class ExpansorAbreviaturas:
     def __init__(self, abreviaturas: Dict[str, str]) -> None:
         self.abreviaturas_originales = abreviaturas
         self.abreviaturas = self._normalizar_diccionario(abreviaturas)
+        #: Conjunto de expansiones conocidas para lookup O(1) en el paso de enriquecimiento.
+        #: Permite saber si un nombre ya es el resultado de una expansión válida.
+        self.valores_conocidos: set = set(self.abreviaturas.values())
         self.patrones = self._compilar_patrones()
 
     def _normalizar_diccionario(
@@ -1130,6 +1133,101 @@ class GlinerService:
 
     # ── Métodos de entrada principal ─────────────────────────────────────
 
+    def _enriquecer_nombre_ejercicio(self, nombre: str, rango: str = "") -> str:
+        """Intenta identificar o corregir un nombre de ejercicio usando GLiNER.
+
+        Se usa como fallback para nombres que el diccionario :data:`ABREVIATURAS`
+        no reconoció (ni como clave ni como valor de expansión). Construye una
+        frase de contexto corta para que el modelo disponga de señal semántica
+        suficiente.
+
+        Requiere que :attr:`GlinerService._modelo` esté ya cargado; si no lo
+        está, devuelve el nombre con ``.title()`` sin lanzar error.
+
+        .. note::
+            GLiNER es un modelo de NER (extracción de entidades), no un
+            corrector ortográfico. Mejorará el reconocimiento en texto libre
+            o en contextos con suficiente señal, pero puede no corregir
+            truncaciones extremas de una sola letra.
+
+        Args:
+            nombre: Nombre del ejercicio a enriquecer (p.ej. ``"rem"``).
+            rango: Rango de repeticiones objetivo (p.ej. ``"6-10"``). Añade
+                contexto adicional al modelo.
+
+        Returns:
+            Nombre normalizado en Title Case según GLiNER, o ``nombre.title()``
+            si el modelo no genera ninguna entidad con confianza suficiente.
+        """
+        # Construir oración con contexto para dar más señal al modelo
+        contexto = f"ejercicio {nombre}"
+        if rango:
+            contexto += f" rango {rango} repeticiones"
+
+        try:
+            entidades = GlinerService._modelo.predict_entities(contexto, ["ejercicio"])
+            for e in entidades:
+                if e["label"] == "ejercicio" and round(e["score"], 2) >= self.threshold:
+                    texto = e["text"].strip()
+                    if texto:
+                        return _normalizar_nombre_ejercicio(texto)
+        except Exception as exc:
+            app_logger.warning(
+                f"GLiNER no pudo enriquecer el ejercicio '{nombre}': {exc}"
+            )
+
+        return nombre.title()
+
+    def _enriquecer_ejercicios_tabla(
+        self, resultados: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Post-procesa los nombres de ejercicio del parser tabular usando GLiNER.
+
+        Para cada ejercicio cuyo nombre **no es** una clave conocida en
+        :data:`ABREVIATURAS` ni un valor de expansión registrado, delega en
+        :meth:`_enriquecer_nombre_ejercicio` para que GLiNER intente una
+        mejora. Los nombres ya conocidos (abreviaturas expandidas o nombres
+        completos del diccionario) se dejan sin modificar.
+
+        Esto mantiene al diccionario de abreviaturas limitado a shorthands
+        reales del gym, dejando al modelo de IA la responsabilidad de cubrir
+        variantes OCR, truncaciones y términos no catalogados.
+
+        Requiere que :attr:`GlinerService._modelo` esté ya cargado; si no lo
+        está, la función devuelve la lista sin modificaciones.
+
+        Args:
+            resultados: Lista de ejercicios del parser tabular.
+
+        Returns:
+            La misma lista con nombres potencialmente corregidos por GLiNER.
+        """
+        enriquecidos: List[Dict[str, Any]] = []
+        for ej in resultados:
+            nombre_titulo = ej["ejercicio"]
+            nombre_norm = _normalizar_texto_base(nombre_titulo)
+
+            # Determinar si GLiNER debe intervenir:
+            # - No es clave en el dict (no es una abreviatura conocida)
+            # - No es valor de expansión (no es ya el resultado correcto)
+            es_reconocido = (
+                nombre_norm in EXPANSOR.abreviaturas
+                or nombre_norm in EXPANSOR.valores_conocidos
+            )
+
+            if not es_reconocido:
+                app_logger.debug(
+                    f"Nombre '{nombre_titulo}' no reconocido por ABREVIATURAS. "
+                    "Intentando con GLiNER..."
+                )
+                nombre_corregido = self._enriquecer_nombre_ejercicio(
+                    nombre_titulo, ej.get("rango_objetivo", "")
+                )
+                ej = {**ej, "ejercicio": nombre_corregido}
+
+            enriquecidos.append(ej)
+        return enriquecidos
+
     def procesar_texto_rutina(self, texto_ocr: str) -> List[Dict[str, Any]]:
         """Punto de entrada principal para extraer datos de una rutina de entrenamiento.
 
@@ -1163,7 +1261,13 @@ class GlinerService:
 
         if _es_tabla(texto_ocr):
             app_logger.info("Formato tabular detectado. Usando parser directo.")
-            return _parsear_tabla(texto_ocr)
+            resultado = _parsear_tabla(texto_ocr)
+            # Si el modelo ya está cargado, enriquecer con GLiNER los nombres
+            # que el diccionario de abreviaturas no reconoció.
+            if GlinerService._modelo is not None:
+                app_logger.info("Enriqueciendo nombres de ejercicio con GLiNER...")
+                resultado = self._enriquecer_ejercicios_tabla(resultado)
+            return resultado
 
         return self._procesar_texto_libre(texto_ocr)
 
@@ -1215,6 +1319,9 @@ class GlinerService:
 
         if es_tabla:
             resultado = _parsear_tabla(texto_ocr)
+            # Enriquecer con GLiNER si el modelo está cargado
+            if GlinerService._modelo is not None:
+                resultado = self._enriquecer_ejercicios_tabla(resultado)
             modo = "tabla"
         else:
             resultado = self._procesar_texto_libre(texto_ocr)
