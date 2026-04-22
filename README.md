@@ -1,6 +1,6 @@
 TrainersApp
 
-Aplicacion de escritorio desarrollada en Python + CustomTkinter para ayudar a entrenadores personales en el seguimiento de sus atletas. Automatiza la estraccion de datos de rutinas de entrenamiento escritas a mano mediante OCR + IA, y centraliza el seguimiento semnal en una base de datos local SQLite.
+Aplicacion de escritorio desarrollada en Python + CustomTkinter para ayudar a entrenadores personales en el seguimiento de sus atletas. Automatiza la extraccion de datos de rutinas de entrenamiento escritas a mano mediante OCR + IA, y centraliza el seguimiento semanal en una base de datos local SQLite.
 
 ---
 
@@ -14,7 +14,7 @@ Tabla de contenidos
 6. Modulo de IA - ia_service
 7. Tests
 8. Logs
-9. Notas de desarollo
+9. Notas de desarrollo
 
 ---
 
@@ -59,7 +59,7 @@ TrainersApp/
 │
 └── tests/                     # Suite de tests automatizados (pytest)
     ├── __init__.py
-    └── test_ia_service.py     # 119 tests del modulo ia_service
+    └── test_ia_service.py     # 127 tests del modulo ia_service
 ```
 
 ---
@@ -135,6 +135,13 @@ pip install -r requirements.txt
 pip install pytest   # solo si vas a correr los tests
 ```
 
+#### Requisitos del Sistema (OCR)
+
+Para que el procesamiento de fotos funcione, debes tener instalado **Tesseract OCR** en tu sistema:
+
+- **Windows**: Descarga el instalador de [UB-Mannheim](https://github.com/UB-Mannheim/tesseract/wiki). Asegúrate de añadir la ruta (ej: `C:\Program Files\Tesseract-OCR`) a las variables de entorno (PATH) o configurar `pytesseract.pytesseract.tesseract_cmd` en el código.
+- **Idiomas**: Se recomienda instalar los datos de entrenamiento para español (`spa`).
+
 La primera vez que se use el modulo de IA, el modelo GLiNER (`urchade/gliner_multi-v2.1`) se descargara automaticamente en `modelos_ia/`. Requiere conexion a internet (unos 200 MB). Las ejecuciones posteriores usan la cache local.
 
 4. Lanzar la aplicacion
@@ -149,7 +156,7 @@ Modulo de IA - ia_service
  
  Ubicacion: logica/ia_service.py
  
- Modulo central que extrae datos estrucurados de ejercicios a partir de texto OCR. Ahora incluye normalizacion inteligente mediante Zero-shot Clasificacion.
+ Modulo central que extrae datos estructurados de ejercicios a partir de texto OCR. Ahora incluye normalizacion inteligente mediante Zero-shot Clasificacion y un pipeline de dos niveles.
  
  Constantes configurables
  
@@ -178,24 +185,29 @@ Modulo de IA - ia_service
  
  Normalizacion inteligente con Zero-shot y Smart Matcher
  
- El sistema ya no depeende solo de un diccionario fijo. Usa un motor hibrido de 3 niveles para resolver incluso los casos mas dificiles de OCR sucio:
+ El sistema ya no depende solo de un diccionario fijo. Usa un motor hibrido de 3 niveles para resolver incluso los casos mas dificiles de OCR sucio:
  
+ - Acrónimos y Shorthands: "pm" → "Peso Muerto", "rdl" → "Peso Muerto Rumano"
  - Truncamientos extremos: "p pla" → "Press Plano"
  - Palabras pegadas: "elevlatmanc" → "Elevaciones Laterales"
  - Artefactos de OCR: "PM.RDL_3x100" → "Peso Muerto Rumano"
  - Sinonimos y variantes: "tiron polea pecho" → "Jalon Al Pecho"
  
- Esto permite que el sitema sea extremadamente robusto ante errores de lectura de la camara o abrebiaturas personles del atleta. La IA (GLiNER) actua como juez para decidir entre los candidatos mas probables del catalogo canonico.
+ Esto permite que el sistema sea extremadamente robusto ante errores de lectura de la camara o abreviaturas personales del atleta. La IA (GLiNER) actúa como juez semántico, mientras que un **Segmented Safety Net** rescata ejercicios omitidos por la IA mediante búsqueda estructural por fragmentos.
  
- El motor "Smart Matcher" descompone las palabras raras y busca coincidencias por fragmentos, lo que garantiza un 100% de deteccion en los casos de prueba limite.
+ El motor hibrido garantiza un 100% de deteccion en los casos de prueba limite, manejando incluso multiples ejercicios concatenados en una sola linea de texto libre.
  
- Catalogo de ejercicios (EJERCICIOS_CANONICOS)
- 
- La aplicacion "conoce" mas de 100 ejercicios de forma natiba (pecho, espalda, pierna, hommo, core, etc.). Este catalogo se usa como un puente semantico para pasar de texto sucio a datos limpios sin añadir miles de abrebiaturas manuales.
+ La aplicacion "conoce" mas de 100 ejercicios de forma nativa (pecho, espalda, pierna, hombro, core, etc.). Este catalogo se usa como un puente semantico para pasar de texto sucio a datos limpios sin añadir miles de abreviaturas manuales.
+
+#### ¿Cómo añadir nuevos ejercicios?
+
+Si el sistema no reconoce un ejercicio específico, puedes:
+1.  Añadirlo a `EJERCICIOS_CANONICOS` en `logica/ia_service.py` para que el Smart Matcher lo reconozca.
+2.  Añadir una abreviatura en el diccionario `ABREVIATURAS` si el OCR suele leerlo de forma errónea o truncada.
  
  Deteccion automatica de formato
  
- - Tabular (tabs o espacios dobles): parser directo deterministico. Si hay ejercicios desconosidos, se activa el enriquecimiento con IA de forma autonoma.
+ - Tabular (tabs o espacios dobles): parser directo deterministico. Si hay ejercicios desconocidos, se activa el enriquecimiento con IA de forma autonoma.
  - Texto libre: el modelo GLiNER extrae entidades como ejercicio, series, repeticiones, peso en kg y descanso.
  
  Expansion de abreviaturas (ABREVIATURAS)
@@ -248,7 +260,7 @@ Salida de GLiNER (texto libre)
 
 Tests
 
-La suite de tests se encuentra en `tests/test_ia_service.py` y cubre 119 casos organizados en 9 clases:
+La suite de tests se encuentra en `tests/test_ia_service.py` y cubre 127 casos organizados en 10 clases:
 
 | Clase | Que cubre |
 |---|---|
@@ -264,6 +276,7 @@ La suite de tests se encuentra en `tests/test_ia_service.py` y cubre 119 casos o
 | `TestPreprocesadorTextoLibre` | Conversion `NxPESO`, segundos, `p/mano` |
 | `TestGlinerServiceIntegracion` | Flujo completo con texto tavular real |
 | `TestGlinerServiceModelo` | Tests con modelo neuronal real (pytest.mark.slow) |
+| `TestExtremeOcrCases` | Casos de estres extremo: acrónimos, truncamientos y ruido OCR |
 
 Ejecutar los tests
 
@@ -298,8 +311,19 @@ Formato: `YYYY-MM-DD HH:MM:SS - LEVEL - [modulo:linea] - Mensaje`
 
 ---
 
-Notas de desarollo
+Solución de Problemas
+
+| Problema | Causa probable | Solución |
+|---|---|---|
+| No se detectan ejercicios en fotos | Tesseract no instalado o no en PATH | Instalar Tesseract y verificar `tesseract --version` en consola. |
+| Error `ModuleNotFoundError` | Entorno virtual no activado | Ejecutar `.venv\Scripts\activate` antes de `python main.py`. |
+| La IA tarda mucho la primera vez | Descarga del modelo GLiNER | Esperar a que finalice la descarga (aprox. 200MB). |
+| Caracteres extraños en el OCR | Baja resolución de imagen | Intentar tomar la foto con luz natural y mayor nitidez. |
+
+---
+
+Notas de desarrollo
 
 - Los modelos HuggingFace se descargan en `modelos_ia/` gracias a `HF_HOME`. Esta carpeta no se sube al repositorio (ver `.gitignore`).
-- El singleton `GlinerService._modelo` no es thread-safe en la carga inicial. Pre-cargarlo con `GlinerService(cargar_modelo_al_inicio=True)` al arrancar la app evita problemas de concurencia.
-- La clave `"martillo"` fue intencionalmente excluida del diccionario `ABREVIATURAS` para evitar re-expansion en cadena sobre textos ya parcialmente expandidos (la abreviatura valida es `"mart"`).
+- El singleton `GlinerService._modelo` no es thread-safe en la carga inicial. Pre-cargarlo con `GlinerService(cargar_modelo_al_inicio=True)` al arrancar la app evita problemas de concurrencia.
+- El sistema incluye una lógica de **Deduplicación Final** que prefiere el ejercicio más largo y específico en caso de solapamiento (ej: prefiere "Sentadilla Bulgara" frente a "Sentadilla").
