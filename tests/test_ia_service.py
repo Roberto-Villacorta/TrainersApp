@@ -785,3 +785,48 @@ class TestGlinerServiceModelo:
         info = servicio_con_modelo.procesar_texto_rutina_debug(texto)
         assert info["modo_detectado"] == "gliner"
         assert isinstance(info["resultado"], list)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# TestExtremeOcrCases
+# ═══════════════════════════════════════════════════════════════════
+
+class TestExtremeOcrCases:
+    """Tests para casos de OCR extremo (truncamientos, ruidos, acrónimos)."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        self.serv = GlinerService()
+
+    def test_vuelalat_maps_to_elevaciones_laterales(self):
+        res = self.serv._enriquecer_nombre_ejercicio("vuelalat")
+        assert res == "Elevaciones Laterales"
+
+    def test_pm_rum_maps_to_peso_muerto_rumano(self):
+        res = self.serv._enriquecer_nombre_ejercicio("pm-rum")
+        assert res == "Peso Muerto Rumano"
+
+    def test_p_pla_maps_to_press_plano(self):
+        res = self.serv._enriquecer_nombre_ejercicio("p pla")
+        assert res == "Press Plano"
+
+    def test_ban_inc_maps_to_press_inclinado(self):
+        res = self.serv._enriquecer_nombre_ejercicio("ban inc")
+        assert res == "Press Inclinado"
+
+    def test_sntdll_blgr_maps_to_sentadilla_bulgara(self):
+        res = self.serv._enriquecer_nombre_ejercicio("sntdll blgr")
+        assert res == "Sentadilla Bulgara"
+
+    def test_hiptrust_maps_to_hip_thrust(self):
+        res = self.serv._enriquecer_nombre_ejercicio("hiptrust")
+        assert res == "Hip Thrust"
+
+    def test_pm_acronym(self):
+        # Test directo del matcher de acrónimos
+        res = self.serv._enriquecer_nombre_ejercicio("pm")
+        assert res == "Peso Muerto"
+
+    def test_rdl_shorthand(self):
+        res = self.serv._enriquecer_nombre_ejercicio("rdl")
+        assert res == "Peso Muerto Rumano"

@@ -34,6 +34,7 @@ import os
 import re
 import math
 import unicodedata
+import difflib
 from typing import List, Dict, Any, Optional
 
 from gliner import GLiNER
@@ -54,7 +55,8 @@ MODEL_NAME: str = "urchade/gliner_multi-v2.1"
 
 #: Umbral de confianza mínimo (score) para aceptar una entidad detectada por GLiNER.
 #: Las entidades con score < THRESHOLD_DEFAULT se descartan.
-THRESHOLD_DEFAULT: float = 0.4
+#: Se baja a 0.3 para permitir una normalización zero-shot más flexible.
+THRESHOLD_DEFAULT: float = 0.3
 
 # Redirigir descarga de modelos HuggingFace a la carpeta local.
 os.environ["HF_HOME"] = MODEL_DIR
@@ -118,6 +120,10 @@ def _normalizar_texto_base(texto: str) -> str:
     texto = _quitar_acentos(texto)
 
     texto = texto.replace("_", " ")
+    # Limpieza de ruidos de unión comunes en OCR (puntos, guiones, barras bajas)
+    # Reemplazamos por espacios si están entre letras para segmentar correctamente
+    texto = re.sub(r"(?<=[a-z])[\._\-](?=[a-z])", " ", texto)
+    
     texto = texto.replace("–", "-")   # guión en dash
     texto = texto.replace("—", "-")   # guión largo em dash
     texto = texto.replace("/", " / ")
@@ -171,13 +177,15 @@ EJERCICIOS_CANONICOS: List[str] = [
     "cruce en polea", "fondos", "peck deck", "press hammer",
     # Espalda
     "dominadas", "dominadas supinas", "dominadas pronas", "dominadas neutras",
-    "jalon", "jalon al pecho", "jalon tras nuca", "remo", "remo con mancuernas",
+    "jalon al pecho", "jalon tras nuca", "remo", "remo con mancuernas",
     "remo con barra", "remo en polea", "remo en t", "pullover", "tiron dominadas",
     "remo horizontal", "remo pendlay", "remo unipolar", "lumbares",
+    "tiron al pecho", "tiron polea", "tiron", "remo", "jalon",
     # Hombro
     "elevaciones laterales", "elevaciones frontales", "elevaciones posteriores",
+    "vuelos laterales", "vuelos frontales", "vuelos posteriores",
     "pajaro", "face pull", "press hombro", "press militar", "press arnold",
-    "encogimientos", "press tras nuca", "upright row",
+    "encogimientos", "press tras nuca", "upright row", "jalon en polea",
     # Pierna
     "sentadilla", "sentadilla trasera", "sentadilla frontal", "sentadilla bulgara",
     "zancadas", "prensa", "extension cuadriceps", "curl femoral",
@@ -185,12 +193,14 @@ EJERCICIOS_CANONICOS: List[str] = [
     "abduccion", "aduccion", "gemelos", "elevaciones de gemelos",
     "peso muerto", "peso muerto convencional", "peso muerto sumo",
     "peso muerto rumano", "hack squat", "leg press", "step up", "glute bridge",
+    "sentadilla hack", "zancada", "elevacion de talones",
     # Brazos
     "curl", "curl con barra", "curl con barra z", "curl con mancuernas",
     "curl martillo", "martillo continuo", "curl predicador", "curl concentrado",
     "curl bayesian", "extensiones triceps", "extensiones triceps cuerda",
     "extensiones triceps polea", "extensiones trasnuca", "press cerrado",
     "patada triceps", "dips", "skullcrushers", "frances", "curl araña",
+    "press frances", "jalon de triceps",
     # Core / Cardio / Otros
     "abdominales", "crunch", "plancha", "elevaciones de piernas", "ab wheel",
     "cinta", "bicicleta", "remo ergometro", "descanso", "burpees", "jumping jacks"
@@ -209,16 +219,19 @@ EJERCICIOS_CANONICOS: List[str] = [
 #: Sin embargo, **no deben tener espacios sobrantes** en los extremos.
 ABREVIATURAS: Dict[str, str] = {
     # ── Press / Pecho ────────────────────────────────────────────────────
-    "p incl":          "press inclinado",
-    "p. incl":         "press inclinado",
-    "press incl":      "press inclinado",
     "press inc":       "press inclinado",
     "p inc":           "press inclinado",
+    "p incl":          "press inclinado",
+    "ban inc":         "press inclinado",
+    "ban incl":        "press inclinado",
     "p plano":         "press plano",
     "p plan":          "press plano",
+    "p pla":           "press plano",
     "p. plan":         "press plano",
+    "p. pla":          "press plano",
     "p. plano":        "press plano",
     "press plan":      "press plano",
+    "press pla":       "press plano",
     "press plano":     "press plano",
     "p decl":          "press declinado",
     "p. decl":         "press declinado",
@@ -244,11 +257,15 @@ ABREVIATURAS: Dict[str, str] = {
     "elev. front":     "elevaciones frontales",
     "elev post":       "elevaciones posteriores",
     "elev. post":      "elevaciones posteriores",
+    "vuel lat":        "elevaciones laterales",
+    "vuelos lat":      "elevaciones laterales",
+    "vuel":            "elevaciones laterales",
     "pajaro":          "pajaro",
     "paj":             "pajaro",
     "face pull":       "face pull",
     "facepull":        "face pull",
     "fp":              "face pull",
+    "fce pull":        "face pull",
     "press homb":      "press hombro",
     "p homb":          "press hombro",
     "ph":              "press hombro",
@@ -271,11 +288,13 @@ ABREVIATURAS: Dict[str, str] = {
     "jalon":           "jalon",
     "jal pech":        "jalon al pecho",
     "jal pecho":       "jalon al pecho",
+    "j pecho":         "jalon al pecho",
     "jal tras":        "jalon tras nuca",
     "remo":            "remo",
     "remo manc":       "remo con mancuernas",
     "remo barra":      "remo con barra",
     "remo polea":      "remo en polea",
+    "r polea":         "remo en polea",
     "remo t":          "remo en t",
     "rm t":            "remo en t",
     "pullover":        "pullover",
@@ -296,11 +315,13 @@ ABREVIATURAS: Dict[str, str] = {
     "curl conc":       "curl concentrado",
     "curl bayes":      "curl bayesian",
     "bayes":           "curl bayesian",
+    "cur b z":         "curl con barra z",
 
     # ── Tríceps ──────────────────────────────────────────────────────────
     "ext tric":        "extensiones triceps",
     "ext. tric":       "extensiones triceps",
     "ext triceps":     "extensiones triceps",
+    "ext tri":         "extensiones triceps",
     "ext cuerda":      "extensiones triceps cuerda",
     "ext polea":       "extensiones triceps polea",
     "ext tras":        "extensiones trasnuca",
@@ -336,7 +357,7 @@ ABREVIATURAS: Dict[str, str] = {
     "puente gl":       "puente gluteo",
     "abductor":        "abduccion",
     "abduct":          "abduccion",
-    "aductor":         "aduccion",       # corregido: sin espacio trailing
+    "aductor":         "aduccion",
     "adduct":          "aduccion",
     "gom":             "gemelos",
     "gem":             "gemelos",
@@ -384,9 +405,13 @@ ABREVIATURAS: Dict[str, str] = {
     "s":               "segundos",
     "min":             "minutos",
 
-    # ── Legacy ───────────────────────────────────────────────────────────
+    # ── Legacy / Otros ───────────────────────────────────────────────────
     "ext acl":         "extension acl",
     "pres millo":      "press y martillo",
+    "vuelalat":        "elevaciones laterales",
+    "ban inc":         "press inclinado",
+    "ban incl":        "press inclinado",
+    "ban pla":         "press plano",
 }
 
 
@@ -471,7 +496,7 @@ class ExpansorAbreviaturas:
             Patrón regex compilado, insensible a mayúsculas.
         """
         tokens = [re.escape(t) for t in clave.split()]
-        separador = r"[\s\.\-\/]*"
+        separador = r"[\s\.\-\/_]*"
         patron = separador.join(tokens)
         regex = rf"(?<!\w){patron}(?!\w)"
         return re.compile(regex, flags=re.IGNORECASE)
@@ -908,6 +933,87 @@ def _parsear_tabla(texto: str) -> List[Dict[str, Any]]:
     return resultados
 
 
+def _match_acronimo(texto: str, canonico: str) -> bool:
+    """Comprueba si un texto es un acrónimo de un nombre canónico.
+
+    Ejemplos:
+        'pm' -> 'peso muerto' (p m)
+        'rdl' -> 'rumanian deadlift' (aunque aquí usamos 'peso muerto rumano')
+    """
+    if not texto or len(texto) < 2:
+        return False
+
+    tokens_canon = _normalizar_texto_base(canonico).split()
+    if len(tokens_canon) < len(texto):
+        return False
+
+    # El acrónimo debe coincidir con la primera letra de los primeros N tokens
+    # O ser una sub-secuencia de las iniciales
+    iniciales = "".join(t[0] for t in tokens_canon if t)
+    return texto in iniciales
+
+
+def _buscar_mejor_coincidencia_semantica(nombre: str) -> Optional[str]:
+    """Busca la mejor coincidencia del catálogo basándose en fragmentos y acrónimos.
+
+    Util para casos de truncamiento extremo sin espacios (ej: 'elevlatmanc').
+    Orquesta tres estrategias:
+    1. Coincidencia exacta/prefijo.
+    2. Acrónimos (pm -> peso muerto).
+    3. Similitud estructural (difflib).
+
+    Args:
+        nombre: Nombre sucio o truncado.
+
+    Returns:
+        Nombre canónico si se encuentra una coincidencia clara, else None.
+    """
+    clean = _normalizar_texto_base(nombre).replace(" ", "")
+    if len(clean) < 2:
+        return None
+
+    # 1. Coincidencia por prefijo o contenido exacto (O(n))
+    for canonico in EJERCICIOS_CANONICOS:
+        canon_norm = _normalizar_texto_base(canonico).replace(" ", "")
+        if canon_norm.startswith(clean) or clean in canon_norm:
+            # Si el match es muy corto, ser más exigente
+            if len(clean) <= 3 and not canon_norm.startswith(clean):
+                continue
+            return canonico
+
+    # 2. Match por Acrónimo
+    for canonico in EJERCICIOS_CANONICOS:
+        if _match_acronimo(clean, canonico):
+            return canonico
+
+    # 3. Búsqueda por ratio de similitud (SequenceMatcher)
+    mejor_match = None
+    max_ratio = 0.0
+    es_muy_corto = len(clean) <= 4
+
+    for canonico in EJERCICIOS_CANONICOS:
+        canon_norm = _normalizar_texto_base(canonico).replace(" ", "")
+        
+        # Calcular ratio de similitud estructural
+        ratio = difflib.SequenceMatcher(None, clean, canon_norm).ratio()
+        
+        # Bonus extra si el nombre sucio es un prefijo de alguna palabra del canon
+        tokens_canon = canonico.lower().split()
+        if any(palabra.startswith(clean[:2]) for palabra in tokens_canon if len(palabra) >= 2):
+            ratio += 0.15
+
+        if ratio > max_ratio:
+            max_ratio = ratio
+            mejor_match = canonico
+
+    # Umbral dinámico
+    umbral = 0.45 if not es_muy_corto else 0.65
+    if mejor_match and max_ratio >= umbral:
+        return mejor_match
+
+    return None
+
+
 # ─────────────────────────────────────────────────────────────────
 # SERVICIO PRINCIPAL — GlinerService
 # ─────────────────────────────────────────────────────────────────
@@ -1123,46 +1229,48 @@ class GlinerService:
         texto = re.sub(r"(\d+)\s*(?:''|\")", r"\1 segundos", texto)
         texto = re.sub(r"\b(\d+)\s*s\b", r"\1 segundos", texto)
 
+        # SEGMENTACIÓN UNIVERSAL: Separar números de letras pegados (ej: 100kgpress -> 100 kg press)
+        texto = re.sub(r"(\d+)([a-z])", r"\1 \2", texto)
+        texto = re.sub(r"([a-z])(\d+)", r"\1 \2", texto)
+
         texto = re.sub(r"\s+", " ", texto).strip()
         return texto
 
     def _procesar_texto_libre(self, texto: str) -> List[Dict[str, Any]]:
-        """Procesa texto libre con el modelo GLiNER y devuelve entidades detectadas.
+        """Procesa texto libre con el modelo GLiNER y una red de seguridad segmentada.
 
-        Carga el modelo si aún no está disponible, preprocesa el texto y
-        filtra las entidades por el umbral de confianza configurado.
+        Pipeline:
+        1. Pre-expansión de abreviaturas para normalizar términos antes de la IA.
+        2. Clasificación Zero-shot con GLiNER.
+        3. Red de seguridad segmentada: busca ejercicios del catálogo en los
+           fragmentos del texto que la IA pudiera haber omitido.
 
         Args:
             texto: Texto libre de rutina de entrenamiento.
 
         Returns:
-            Lista de diccionarios con la estructura::
-
-                {
-                    "tipo":      str,    # etiqueta GLiNER (ej. "ejercicio")
-                    "texto":     str,    # texto detectado (normalizado si es ejercicio)
-                    "confianza": float,  # score redondeado a 2 decimales
-                    "origen":    "gliner"
-                }
-
-            Las entidades con ``score < threshold`` se descartan.
+            Lista de entidades detectadas con normalización aplicada.
         """
         self.cargar_modelo()
 
-        texto_limpio = self._preprocesar_texto_libre(texto)
+        # 1. Pre-expansión (ayuda a GLiNER a ver nombres completos)
+        texto_expandido = _expandir_abreviaturas(texto)
+        texto_limpio = self._preprocesar_texto_libre(texto_expandido)
+        
         app_logger.info("Analizando texto libre con GLiNER...")
         entidades = GlinerService._modelo.predict_entities(texto_limpio, self.labels)
 
         resultados: List[Dict[str, Any]] = []
         for e in entidades:
             score = round(e["score"], 2)
-            # Se usa < (no <=) para incluir exactamente el valor del umbral
             if score < self.threshold:
                 continue
 
             texto_entidad = e["text"].strip()
             if e["label"] == "ejercicio":
-                texto_entidad = _normalizar_nombre_ejercicio(texto_entidad)
+                # Intentamos mejorar el match de GLiNER con el Smart Matcher
+                match_smart = _buscar_mejor_coincidencia_semantica(texto_entidad)
+                texto_entidad = _normalizar_nombre_ejercicio(match_smart if match_smart else texto_entidad)
 
             resultados.append({
                 "tipo":      e["label"],
@@ -1171,49 +1279,98 @@ class GlinerService:
                 "origen":    "gliner",
             })
 
-        return resultados
+        # --- RED DE SEGURIDAD SEGMENTADA ---
+        # Si hay partes del texto que parecen ejercicios (por Smart Matcher)
+        # y GLiNER no los detectó, los rescatamos.
+        fragmentos = re.split(r"[\s_/,;]+", texto_expandido)
+        for frag in fragmentos:
+            frag_limpio = frag.strip()
+            if len(frag_limpio) < 3:
+                continue
+            
+            # ¿Este fragmento ya está cubierto por algún ejercicio detectado?
+            ya_detectado = False
+            for res in resultados:
+                if res["tipo"] == "ejercicio" and frag_limpio.lower() in res["texto"].lower():
+                    ya_detectado = True
+                    break
+            
+            if not ya_detectado:
+                match_seguridad = _buscar_mejor_coincidencia_semantica(frag_limpio)
+                if match_seguridad:
+                    # Evitar duplicados exactos en resultados
+                    nombre_norm = _normalizar_nombre_ejercicio(match_seguridad)
+                    if not any(r["texto"] == nombre_norm for r in resultados):
+                        resultados.append({
+                            "tipo":      "ejercicio",
+                            "texto":     nombre_norm,
+                            "confianza": 0.5,
+                            "origen":    "segmented_safety_net"
+                        })
+
+        # --- DEDUPLICACIÓN FINAL ---
+        # Ordenamos por longitud de texto (descendente) para conservar el más específico
+        resultados.sort(key=lambda x: len(x["texto"]), reverse=True)
+        finales: List[Dict[str, Any]] = []
+        for res in resultados:
+            if res["tipo"] == "ejercicio":
+                # Si ya tenemos un ejercicio que contiene a este como substring, lo omitimos
+                # Ej: "Dominadas" vs "Dominadas Neutras" -> Nos quedamos con la larga
+                if any(res["texto"].lower() in f["texto"].lower() for f in finales if f["tipo"] == "ejercicio"):
+                    continue
+            finales.append(res)
+
+        return finales
 
     # ── Métodos de entrada principal ─────────────────────────────────────
 
     def _enriquecer_nombre_ejercicio(self, nombre: str, rango: str = "") -> str:
-        """Intenta identificar o corregir un nombre de ejercicio usando GLiNER.
+        """Normaliza un nombre de ejercicio combinando IA y lógica estructural.
 
-        Utiliza Zero-shot Classification: en lugar de buscar la etiqueta
-        genérica 'ejercicio', utiliza la lista de nombres canónicos como
-        etiquetas. Esto permite que el modelo mapee términos truncados o
-        incorrectos (ej. 'rem') directamente a un nombre completo (ej. 'Remo').
-
-        Requiere que el modelo esté cargado.
-
-        Args:
-            nombre: Nombre del ejercicio a enriquecer (p.ej. ``"rem"``).
-            rango: Rango para añadir contexto (p.ej. ``"6-10"``).
+        Pipeline Maestro:
+        1. Limpieza de OCR y expansión de abreviaturas.
+        2. Búsqueda directa en catálogo (Smart Matcher).
+        3. Clasificación Zero-shot con GLiNER si lo anterior es incierto.
 
         Returns:
-            Nombre normalizado en Title Case según la mejor etiqueta de GLiNER.
+            Nombre normalizado en Title Case.
         """
-        # Contexto mínimo: solo el nombre y el rango para evitar dilución
-        contexto = f"ejercicio {nombre}"
+        # 1. Limpieza inicial y expansión rápida
+        nombre_limpio = _normalizar_texto_base(nombre)
+        if not nombre_limpio:
+            return nombre.title()
+
+        # Intentamos expandir antes de buscar estructuralmente, por si es una abrev conocida
+        nombre_expandido = _expandir_abreviaturas(nombre_limpio)
+        
+        # 2. Motor Estructural (Smart Matcher) - Maneja truncamientos extremos
+        # Esto resuelve casos como 'elevlatmanc' o 'pmrum' sin IA pesada
+        match_semantico = _buscar_mejor_coincidencia_semantica(nombre_expandido)
+        if match_semantico:
+            return _normalizar_nombre_ejercicio(match_semantico)
+
+        # 3. GLiNER (IA) - Para casos de lenguaje natural ruidoso
+        # Primero intentamos con candidatos cercanos
+        candidatos = difflib.get_close_matches(
+            nombre_limpio, EJERCICIOS_CANONICOS, n=5, cutoff=0.2
+        )
+        etiquetas = candidatos if candidatos else ["ejercicio"]
+
+        contexto = f"un ejercicio de {nombre_limpio}"
         if rango:
             contexto += f" {rango}"
-
-        # Usamos los ejercicios canónicos como etiquetas dinámicas
-        # Limitamos a un subconjunto relevante si fuera necesario por perf,
-        # pero para ~100 etiquetas GLiNER suele ser eficiente.
-        etiquetas = EJERCICIOS_CANONICOS
 
         try:
             entidades = GlinerService._modelo.predict_entities(contexto, etiquetas)
             if entidades:
-                # Ordenar por score y elegir el mejor que supere el umbral
                 entidades.sort(key=lambda x: x["score"], reverse=True)
                 mejor = entidades[0]
-                if round(mejor["score"], 2) >= self.threshold:
-                    return _normalizar_nombre_ejercicio(mejor["label"])
+                if mejor["score"] >= self.threshold:
+                    if mejor["label"] in EJERCICIOS_CANONICOS:
+                        return _normalizar_nombre_ejercicio(mejor["label"])
+                    return _normalizar_nombre_ejercicio(mejor["text"])
         except Exception as exc:
-            app_logger.warning(
-                f"GLiNER no pudo normalizar el ejercicio '{nombre}': {exc}"
-            )
+            app_logger.warning(f"Error en enriquecimiento IA para '{nombre}': {exc}")
 
         return nombre.title()
 

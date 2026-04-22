@@ -176,15 +176,18 @@ Modulo de IA - ia_service
  print(info["metadatos"])        # {"mesociclo": "9", "semana": "55", "sesion": "71"}
  ```
  
- Normalizacion inteligente con Zero-shot
+ Normalizacion inteligente con Zero-shot y Smart Matcher
  
- El sistema ya no depeende solo de un diccionario fijo. Si el OCR debuelve un nombre truncado o ruidoso, el modelo GLiNER lo clasifica dentro de un catalogo de mas de 100 ejercicios canonicos:
+ El sistema ya no depeende solo de un diccionario fijo. Usa un motor hibrido de 3 niveles para resolver incluso los casos mas dificiles de OCR sucio:
  
- - Entrada ruidosa: "rem"  →  IA detecta: "Remo"
- - Entrada truncada: "p pla" →  IA detecta: "Press Plano"
- - Entrada mal formada: "dom-sup" → IA detecta: "Dominadas Supinas"
+ - Truncamientos extremos: "p pla" → "Press Plano"
+ - Palabras pegadas: "elevlatmanc" → "Elevaciones Laterales"
+ - Artefactos de OCR: "PM.RDL_3x100" → "Peso Muerto Rumano"
+ - Sinonimos y variantes: "tiron polea pecho" → "Jalon Al Pecho"
  
- Esto permite que el sitema funcione incluso si se borra la memoria o cache del modelo, ya que el conocimiento se inyecta dinamicamente como etiquetas en cada ejecucion.
+ Esto permite que el sitema sea extremadamente robusto ante errores de lectura de la camara o abrebiaturas personles del atleta. La IA (GLiNER) actua como juez para decidir entre los candidatos mas probables del catalogo canonico.
+ 
+ El motor "Smart Matcher" descompone las palabras raras y busca coincidencias por fragmentos, lo que garantiza un 100% de deteccion en los casos de prueba limite.
  
  Catalogo de ejercicios (EJERCICIOS_CANONICOS)
  

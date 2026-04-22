@@ -42,12 +42,20 @@ test_cases = [
     "Gom\t21-30\t30x60\t30x60\t26x30\t\n"
     "Pres millo\t10-12\t8x27\t11x30\t11x30\t",
 
-    # CASOS LÍMITE (TRUNCAMIENTOS EXTREMOS Y ARTEFACTOS)
-    "Caso Limite 1: Truncamiento extremo\np pla\t7-12\t3x120\next tri\t10-12\t10x30\nc bay\t12-15\t12x15",
+    # VALIDACIÓN FINAL: 5 CASOS LÍMITE (TRUNCAMIENTOS, RUIDO Y PEQUEÑAS VARIANTES)
+    "p pla\t7-12\t3x120\text tri\t10-12\t10x30",
+    "PM.RDL_3x100\nB.DIAS_3x80\nEXT.CUERDA_12x15",
+    "Ejercicio\tS1\nPressManc\t10x30\nMartilloCont\t15x20",
+    "elevlatmanc\t12-15\t15x10\ncurlz\t8-10\t10x40",
+    "tiron polea pecho\t8-10\t10x80\nextension de cuadriceps maq\t12-15\t15x60",
     
-    "Caso Limite 2: OCR ruidoso y pegado\nPM.RDL_3x100\nB.DIAS_3x80\nDOM-SUP_8reps",
-    
-    "Caso Limite 3: Tabla malformada\nEjercicio\tRango\tSerie 1\nPressManc\t10\t\t10x30\nMartillo\t\t12x15\n"
+    # BATERÍA B: CASOS DE ESTRÉS EXTREMOS (FRAGMENTACIÓN Y FALTA DE VOCALES)
+    "vuelalat\t15x12\tcur b z\t10x30\tpm-rum/3x100",
+    "sntdll blgr\t8-10\t10x60\nhiptrust\t12x100\npress_ban_incl\t10x80",
+    "fce pull\t15x20\tr.polea\t10x50\tj.pecho\t12x60",
+    "jalon.p.pecho_10x80.0kg",
+    "4x12_100kg_press_ban_plano_manc",
+    "dominada.neutra.lastre.10kg"
 ]
 
 # ──────────────────────────────────────────────
