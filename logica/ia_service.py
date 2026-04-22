@@ -249,8 +249,6 @@ ABREVIATURAS: Dict[str, str] = {
     "curl alt":        "curl alterno",
     "curl mart":       "curl martillo",
     "mart":            "curl martillo",
-    # Nota: 'martillo' NO se define como clave porque es ya el nombre completo
-    # de la expansión; incluirla causa re-expansión en cadena.
     "mat cont":        "martillo continuo",
     "curl predic":     "curl predicador",
     "curl pred":       "curl predicador",
