@@ -1,6 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Script de prueba para el GlinerService.
+Script de INSPECCIÓN MANUAL para GlinerService.
+
+Este script está pensado para ejecutarse de forma interactiva y ver la salida
+formateada en consola. NO es parte de la suite de tests automatizados.
+
+Para correr los tests automatizados usa:
+    pytest tests/test_ia_service.py -m "not slow" -v   ← sin modelo GLiNER
+    pytest tests/test_ia_service.py -v                 ← todos (incluye GLiNER)
+
 Evalua la precision del modelo con distintos tipos de texto de rutinas de gym.
 """
 import sys

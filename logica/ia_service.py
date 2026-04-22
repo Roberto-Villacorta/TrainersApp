@@ -1,209 +1,1233 @@
+# -*- coding: utf-8 -*-
+"""
+Módulo de servicio de Inteligencia Artificial para extracción de rutinas.
+
+Este módulo proporciona herramientas para extraer datos estructurados de
+ejercicios a partir de texto sin formato o tabular obtenido mediante OCR.
+El flujo principal es el siguiente:
+
+1. Se normaliza y limpia el texto de entrada.
+2. Se detecta automáticamente si el texto tiene formato tabular o libre.
+3. Si es tabular → parser directo (rápido, sin modelo neuronal).
+4. Si es texto libre → modelo GLiNER (NER multilingüe).
+
+Uso básico::
+
+    from logica.ia_service import GlinerService
+
+    serv = GlinerService()
+    resultados = serv.procesar_texto_rutina(texto_ocr)
+
+Uso de debug::
+
+    info = serv.procesar_texto_rutina_debug(texto_ocr)
+    print(info["modo_detectado"])   # "tabla" | "gliner"
+    print(info["resultado"])        # lista de ejercicios / entidades
+
+Constantes de configuración:
+    MODEL_NAME (str): Nombre del modelo GLiNER en HuggingFace.
+    THRESHOLD_DEFAULT (float): Umbral de confianza mínimo para entidades GLiNER.
+    MODEL_DIR (str): Ruta local donde se guardan los modelos descargados.
+"""
+
 import os
 import re
+import math
+import unicodedata
+from typing import List, Dict, Any, Optional
+
 from gliner import GLiNER
 from utils.logger import app_logger
 
-# Configurar para que todos los modelos descargados vayan a la carpeta local 'modelos_ia'
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL_DIR = os.path.join(BASE_DIR, "modelos_ia")
+# ---------------------------------------------------------------------------
+# Configuración de rutas y constantes globales
+# ---------------------------------------------------------------------------
+
+#: Directorio raíz del proyecto (un nivel por encima de /logica).
+BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+#: Directorio local donde se almacenan los modelos HuggingFace descargados.
+MODEL_DIR: str = os.path.join(BASE_DIR, "modelos_ia")
+
+#: Nombre del modelo GLiNER en HuggingFace Hub.
+MODEL_NAME: str = "urchade/gliner_multi-v2.1"
+
+#: Umbral de confianza mínimo (score) para aceptar una entidad detectada por GLiNER.
+#: Las entidades con score < THRESHOLD_DEFAULT se descartan.
+THRESHOLD_DEFAULT: float = 0.4
+
+# Redirigir descarga de modelos HuggingFace a la carpeta local.
 os.environ["HF_HOME"] = MODEL_DIR
 
+
 # ─────────────────────────────────────────────────────────────────
-# Diccionario de abreviaturas comunes de gimnasio
-# Extend este diccionario libremente con los términos de tu sistema
+# NORMALIZACIÓN DE TEXTO
 # ─────────────────────────────────────────────────────────────────
-ABREVIATURAS = {
-    # Ejercicios con punto o espacio (se reemplazan como cadena literal)
-    "p. incl":    "press inclinado",
-    "p. plan":    "press plano",
-    "p. plano":   "press plano",
-    "elev. lat":  "elevaciones laterales",
-    "elev lat":   "elevaciones laterales",
-    "curl predic":"curl predicador",
-    "curl bien":  "curl predicador",
-    "exten. tras":"extensiones trasnuca",
-    "ext. tras":  "extensiones trasnuca",
-    "ext. tric":  "extensiones triceps",
-    "mat cont":   "martillo continuo",
-    "t don":      "tiron dominadas",
-    "ext acl":    "extension acl",
-    "pres millo": "press y martillo",
-    # Ejercicios con word-boundary
-    "dom":    "dominadas",
-    "pajaro": "pajaro",
-    "sent":   "sentadilla",
-    "sentadll":"sentadilla",
-    "gom":    "gemelos",
-    "gem":    "gemelos",
-    "pm":     "peso muerto",
-    "pes":    "peso muerto",
-    "remo":   "remo",
-    "kckton": "patada triceps",
-    # Genéricos
-    "dsc":  "descanso",
-    "desc": "descanso",
-    "reps": "repeticiones",
-    "rep":  "repeticiones",
-    "ser":  "series",
+
+def _quitar_acentos(texto: str) -> str:
+    """Elimina diacríticos (acentos, tildes, diéresis) de una cadena Unicode.
+
+    Utiliza la descomposición NFD para separar el carácter base de sus marcas
+    de combinación (categoría Unicode "Mn") y luego las descarta.
+
+    Args:
+        texto: Cadena de texto con posibles caracteres acentuados.
+
+    Returns:
+        La misma cadena sin marcas diacríticas.
+
+    Examples:
+        >>> _quitar_acentos("Músculo")
+        'Musculo'
+        >>> _quitar_acentos("büro")
+        'buro'
+    """
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto)
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+def _normalizar_texto_base(texto: str) -> str:
+    """Normaliza un texto para comparaciones y búsquedas robustas.
+
+    Realiza las siguientes transformaciones en orden:
+    - Conversión a minúsculas.
+    - Eliminación de acentos mediante :func:`_quitar_acentos`.
+    - Reemplazo de guiones tipográficos y barras por sus equivalentes ASCII.
+    - Colapso de espacios/tabuladores múltiples en uno solo.
+    - Eliminación de espacios alrededor de ``.``, ``-`` y ``/``.
+
+    Args:
+        texto: Texto de entrada, puede ser ``None`` o vacío.
+
+    Returns:
+        Texto normalizado y sin espacios sobrantes.
+        Devuelve ``""`` si la entrada es ``None`` o vacía.
+
+    Examples:
+        >>> _normalizar_texto_base("Press  Banca / Plano")
+        'press banca/plano'
+        >>> _normalizar_texto_base(None)
+        ''
+    """
+    if not texto:
+        return ""
+
+    texto = texto.lower()
+    texto = _quitar_acentos(texto)
+
+    texto = texto.replace("_", " ")
+    texto = texto.replace("–", "-")   # guión en dash
+    texto = texto.replace("—", "-")   # guión largo em dash
+    texto = texto.replace("/", " / ")
+
+    texto = re.sub(r"[ \t]+", " ", texto)
+    texto = re.sub(r"\s*\.\s*", ".", texto)
+    texto = re.sub(r"\s*-\s*", "-", texto)
+    texto = re.sub(r"\s*/\s*", "/", texto)
+
+    return texto.strip()
+
+
+def _normalizar_clave_abrev(clave: str) -> str:
+    """Normaliza una clave del diccionario de abreviaturas para tokenización flexible.
+
+    Extiende :func:`_normalizar_texto_base` eliminando también los separadores
+    ``.``, ``-`` y ``/`` para obtener tokens sólo de palabras separadas por
+    espacios, facilitando la construcción de patrones regex flexibles.
+
+    Args:
+        clave: Clave de abreviatura (posiblemente con puntos, guiones, etc.).
+
+    Returns:
+        Clave normalizada con separadores eliminados y solo espacios simples.
+
+    Examples:
+        >>> _normalizar_clave_abrev("ext. tric")
+        'ext tric'
+        >>> _normalizar_clave_abrev("p. incl")
+        'p incl'
+    """
+    clave = _normalizar_texto_base(clave)
+    clave = clave.replace(".", " ")
+    clave = clave.replace("-", " ")
+    clave = clave.replace("/", " ")
+    clave = re.sub(r"\s+", " ", clave).strip()
+    return clave
+
+
+# ─────────────────────────────────────────────────────────────────
+# DICCIONARIO DE ABREVIATURAS
+# ─────────────────────────────────────────────────────────────────
+
+#: Diccionario que mapea abreviaturas y formas coloquiales de ejercicios
+#: a sus nombres completos normalizados.
+#:
+#: Las claves se normalizan automáticamente al construir :class:`ExpansorAbreviaturas`,
+#: por lo que no es necesario que sean exactas en cuanto a tildes o mayúsculas.
+#: Sin embargo, **no deben tener espacios sobrantes** en los extremos.
+ABREVIATURAS: Dict[str, str] = {
+    # ── Press / Pecho ────────────────────────────────────────────────────
+    "p incl":          "press inclinado",
+    "p. incl":         "press inclinado",
+    "press incl":      "press inclinado",
+    "press inc":       "press inclinado",
+    "p inc":           "press inclinado",
+    "p plano":         "press plano",
+    "p plan":          "press plano",
+    "p. plan":         "press plano",
+    "p. plano":        "press plano",
+    "press plan":      "press plano",
+    "press plano":     "press plano",
+    "p decl":          "press declinado",
+    "p. decl":         "press declinado",
+    "press decl":      "press declinado",
+    "press banca":     "press banca",
+    "p banca":         "press banca",
+    "pb":              "press banca",
+    "press manc":      "press con mancuernas",
+    "p manc":          "press con mancuernas",
+    "apert":           "aperturas",
+    "apert manc":      "aperturas con mancuernas",
+    "cruce polea":     "cruce en polea",
+    "fond":            "fondos",
+    "fondo":           "fondos",
+    "fondos":          "fondos",
+
+    # ── Hombro ───────────────────────────────────────────────────────────
+    "elev lat":        "elevaciones laterales",
+    "elev. lat":       "elevaciones laterales",
+    "elev lateral":    "elevaciones laterales",
+    "elev laterales":  "elevaciones laterales",
+    "elev front":      "elevaciones frontales",
+    "elev. front":     "elevaciones frontales",
+    "elev post":       "elevaciones posteriores",
+    "elev. post":      "elevaciones posteriores",
+    "pajaro":          "pajaro",
+    "paj":             "pajaro",
+    "face pull":       "face pull",
+    "facepull":        "face pull",
+    "fp":              "face pull",
+    "press homb":      "press hombro",
+    "p homb":          "press hombro",
+    "ph":              "press hombro",
+    "press mil":       "press militar",
+    "press mill":      "press militar",
+    "press millo":     "press y martillo",
+    "militar":         "press militar",
+    "arnold":          "press arnold",
+    "p arnold":        "press arnold",
+
+    # ── Espalda / Tirón ──────────────────────────────────────────────────
+    "dom":             "dominadas",
+    "domin":           "dominadas",
+    "dominadas":       "dominadas",
+    "dom sup":         "dominadas supinas",
+    "dom pron":        "dominadas pronas",
+    "dom neut":        "dominadas neutras",
+    "t don":           "tiron dominadas",
+    "jal":             "jalon",
+    "jalon":           "jalon",
+    "jal pech":        "jalon al pecho",
+    "jal pecho":       "jalon al pecho",
+    "jal tras":        "jalon tras nuca",
+    "remo":            "remo",
+    "remo manc":       "remo con mancuernas",
+    "remo barra":      "remo con barra",
+    "remo polea":      "remo en polea",
+    "remo t":          "remo en t",
+    "rm t":            "remo en t",
+    "pullover":        "pullover",
+    "pull over":       "pullover",
+
+    # ── Bíceps ───────────────────────────────────────────────────────────
+    "curl":            "curl",
+    "curl barra":      "curl con barra",
+    "curl z":          "curl con barra z",
+    "curl manc":       "curl con mancuernas",
+    "curl alt":        "curl alterno",
+    "curl mart":       "curl martillo",
+    "mart":            "curl martillo",
+    # Nota: 'martillo' NO se define como clave porque es ya el nombre completo
+    # de la expansión; incluirla causa re-expansión en cadena.
+    "mat cont":        "martillo continuo",
+    "curl predic":     "curl predicador",
+    "curl pred":       "curl predicador",
+    "curl bien":       "curl predicador",
+    "curl conc":       "curl concentrado",
+    "curl bayes":      "curl bayesian",
+    "bayes":           "curl bayesian",
+
+    # ── Tríceps ──────────────────────────────────────────────────────────
+    "ext tric":        "extensiones triceps",
+    "ext. tric":       "extensiones triceps",
+    "ext triceps":     "extensiones triceps",
+    "ext cuerda":      "extensiones triceps cuerda",
+    "ext polea":       "extensiones triceps polea",
+    "ext tras":        "extensiones trasnuca",
+    "ext. tras":       "extensiones trasnuca",
+    "exten tras":      "extensiones trasnuca",
+    "exten. tras":     "extensiones trasnuca",
+    "press cerr":      "press cerrado",
+    "kckton":          "patada triceps",
+    "kickback":        "patada triceps",
+    "pat tr":          "patada triceps",
+
+    # ── Pierna ───────────────────────────────────────────────────────────
+    "sent":            "sentadilla",
+    "sentadll":        "sentadilla",
+    "sentadila":       "sentadilla",
+    "sentadilla":      "sentadilla",
+    "sent tras":       "sentadilla trasera",
+    "sent front":      "sentadilla frontal",
+    "sent bulg":       "sentadilla bulgara",
+    "bulg":            "sentadilla bulgara",
+    "zanc":            "zancadas",
+    "zanc cam":        "zancadas caminando",
+    "prensa":          "prensa",
+    "prens":           "prensa",
+    "ext cuad":        "extension cuadriceps",
+    "ext quad":        "extension cuadriceps",
+    "curl fem":        "curl femoral",
+    "curl fem tumb":   "curl femoral tumbado",
+    "curl fem sent":   "curl femoral sentado",
+    "hip thrust":      "hip thrust",
+    "hip thr":         "hip thrust",
+    "ht":              "hip thrust",
+    "puente gl":       "puente gluteo",
+    "abductor":        "abduccion",
+    "abduct":          "abduccion",
+    "aductor":         "aduccion",       # corregido: sin espacio trailing
+    "adduct":          "aduccion",
+    "gom":             "gemelos",
+    "gem":             "gemelos",
+    "gemelos":         "gemelos",
+    "elev gem":        "elevaciones de gemelos",
+
+    # ── Bisagra / Posterior ──────────────────────────────────────────────
+    "pm":              "peso muerto",
+    "pes":             "peso muerto",
+    "peso m":          "peso muerto",
+    "pm conv":         "peso muerto convencional",
+    "pm sumo":         "peso muerto sumo",
+    "pm rum":          "peso muerto rumano",
+    "pm rdl":          "peso muerto rumano",
+    "rdl":             "peso muerto rumano",
+    "b dias":          "good morning",
+    "buenos dias":     "good morning",
+    "gm":              "good morning",
+
+    # ── Core ─────────────────────────────────────────────────────────────
+    "abs":             "abdominales",
+    "crunch":          "crunch",
+    "plancha":         "plancha",
+    "plank":           "plancha",
+    "elev piernas":    "elevaciones de piernas",
+    "leg raise":       "elevaciones de piernas",
+    "rueda":           "ab wheel",
+    "ab wheel":        "ab wheel",
+
+    # ── Cardio / Genéricos ───────────────────────────────────────────────
+    "cinta":           "cinta",
+    "bici":            "bicicleta",
+    "remo erg":        "remo ergometro",
+    "dsc":             "descanso",
+    "desc":            "descanso",
+    "reps":            "repeticiones",
+    "rep":             "repeticiones",
+    "rps":             "repeticiones",
+    "ser":             "series",
+    "sers":            "series",
+    "kg":              "kg",
+    "kms":             "kilometros",
+    "km":              "kilometros",
+    "seg":             "segundos",
+    "s":               "segundos",
+    "min":             "minutos",
+
+    # ── Legacy ───────────────────────────────────────────────────────────
+    "ext acl":         "extension acl",
+    "pres millo":      "press y martillo",
 }
 
+
+# ─────────────────────────────────────────────────────────────────
+# EXPANSOR DE ABREVIATURAS
+# ─────────────────────────────────────────────────────────────────
+
+class ExpansorAbreviaturas:
+    """Motor de expansión de abreviaturas basado en regex.
+
+    Convierte abreviaturas y nombres coloquiales de ejercicios a su forma
+    completa normalizada. Los patrones se compilan una sola vez al instanciar
+    la clase y se ordenan de mayor a menor longitud para evitar conflictos
+    de solapamiento (p.ej. ``"curl fem tumb"`` debe expandirse antes que
+    ``"curl fem"``).
+
+    Args:
+        abreviaturas: Diccionario ``{abreviatura: expansion}``.
+            Las claves se normalizan internamente; no es necesario que
+            estén en minúsculas ni sin tildes.
+
+    Attributes:
+        abreviaturas_originales (Dict[str, str]): El diccionario tal como se pasó.
+        abreviaturas (Dict[str, str]): Diccionario con claves normalizadas.
+        patrones (List[tuple]): Lista de ``(regex_compilado, expansion)``
+            ordenada por longitud descendente.
+
+    Example::
+
+        expansor = ExpansorAbreviaturas(ABREVIATURAS)
+        print(expansor.expandir("Elev lat 3x12"))
+        # → "elevaciones laterales 3x12"
+    """
+
+    def __init__(self, abreviaturas: Dict[str, str]) -> None:
+        self.abreviaturas_originales = abreviaturas
+        self.abreviaturas = self._normalizar_diccionario(abreviaturas)
+        self.patrones = self._compilar_patrones()
+
+    def _normalizar_diccionario(
+        self, abreviaturas: Dict[str, str]
+    ) -> Dict[str, str]:
+        """Normaliza todas las claves y valores del diccionario de entrada.
+
+        Args:
+            abreviaturas: Diccionario original.
+
+        Returns:
+            Nuevo diccionario con claves procesadas por
+            :func:`_normalizar_clave_abrev` y valores por
+            :func:`_normalizar_texto_base`. Se descartan entradas con
+            clave vacía tras la normalización.
+        """
+        normalizadas: Dict[str, str] = {}
+        for clave, valor in abreviaturas.items():
+            k = _normalizar_clave_abrev(clave)
+            v = _normalizar_texto_base(valor)
+            if k:
+                normalizadas[k] = v
+        return normalizadas
+
+    def _crear_regex_flexible(self, clave: str) -> re.Pattern:
+        """Construye un patrón regex que tolera separadores entre tokens.
+
+        Cada token de la clave se separa con un patrón que acepta
+        espacios, puntos, guiones y barras (``[\\s\\.\\-\\/]*``), lo que
+        permite reconocer ``"ext.tric"``, ``"ext-tric"`` y ``"ext tric"``
+        con el mismo patrón.
+
+        Los límites de palabra (``(?<!\\w)`` / ``(?!\\w)``) evitan
+        coincidencias parciales dentro de otra palabra.
+
+        Args:
+            clave: Clave normalizada (solo palabras separadas por espacios).
+
+        Returns:
+            Patrón regex compilado, insensible a mayúsculas.
+        """
+        tokens = [re.escape(t) for t in clave.split()]
+        separador = r"[\s\.\-\/]*"
+        patron = separador.join(tokens)
+        regex = rf"(?<!\w){patron}(?!\w)"
+        return re.compile(regex, flags=re.IGNORECASE)
+
+    def _compilar_patrones(self) -> List[tuple]:
+        """Compila todos los patrones regex ordenados por longitud descendente.
+
+        El orden garantiza que las abreviaturas más largas se apliquen
+        primero, evitando que una clave corta consuma parte de una clave
+        más larga.
+
+        Returns:
+            Lista de tuplas ``(re.Pattern, str)`` lista para usarse en
+            :meth:`expandir`.
+        """
+        items = sorted(
+            self.abreviaturas.items(),
+            key=lambda x: len(x[0]),
+            reverse=True,
+        )
+        return [
+            (self._crear_regex_flexible(clave), expansion)
+            for clave, expansion in items
+        ]
+
+    def expandir(self, texto: str) -> str:
+        """Expande todas las abreviaturas reconocidas en el texto de entrada.
+
+        El proceso es:
+        1. Normalizar el texto con :func:`_normalizar_texto_base`.
+        2. Aplicar cada patrón en orden (mayor → menor longitud).
+        3. Colapsar espacios múltiples resultantes.
+
+        Si una iteración completa no produce cambios, se detiene antes de
+        terminar el bucle (early-exit) para evitar re-expansiones.
+
+        Args:
+            texto: Texto de entrada con posibles abreviaturas.
+
+        Returns:
+            Texto con abreviaturas expandidas. Devuelve ``""`` si la
+            entrada es vacía o ``None``.
+
+        Example::
+
+            expansor.expandir("curl mart 3x12")
+            # → "curl martillo 3x12"
+        """
+        if not texto:
+            return ""
+
+        texto_norm = _normalizar_texto_base(texto)
+
+        for patron, expansion in self.patrones:
+            anterior = texto_norm
+            texto_norm = patron.sub(expansion, texto_norm)
+
+        texto_norm = re.sub(r"\s+", " ", texto_norm).strip()
+        return texto_norm
+
+    def diagnosticar(self, texto: str) -> Dict[str, Any]:
+        """Devuelve información detallada del proceso de expansión para debug/test.
+
+        A diferencia de :meth:`expandir`, este método registra cada
+        sustitución realizada indicando el match original, su posición y
+        la expansión aplicada.
+
+        Args:
+            texto: Texto de entrada a analizar.
+
+        Returns:
+            Diccionario con las claves:
+
+            - ``"original"`` (str): Texto de entrada sin modificar.
+            - ``"normalizado"`` (str): Texto tras normalización base.
+            - ``"expandido"`` (str): Texto final con abreviaturas expandidas.
+            - ``"abreviaturas_detectadas"`` (List[dict]): Lista de dicts con
+              ``"match"``, ``"span"`` y ``"expansion"`` para cada sustitución.
+
+        Example::
+
+            info = expansor.diagnosticar("Elev lat 20x13,75")
+            # info["expandido"] → "elevaciones laterales 20x13.75"
+            # info["abreviaturas_detectadas"] → [{"match": "elev lat", ...}]
+        """
+        original = texto or ""
+        normalizado = _normalizar_texto_base(original)
+        expandido = normalizado
+        matches: List[Dict[str, Any]] = []
+
+        for patron, expansion in self.patrones:
+            encontrados = list(patron.finditer(expandido))
+            if encontrados:
+                for m in encontrados:
+                    matches.append({
+                        "match": m.group(0),
+                        "span": m.span(),
+                        "expansion": expansion,
+                    })
+                expandido = patron.sub(expansion, expandido)
+
+        expandido = re.sub(r"\s+", " ", expandido).strip()
+
+        return {
+            "original": original,
+            "normalizado": normalizado,
+            "expandido": expandido,
+            "abreviaturas_detectadas": matches,
+        }
+
+
+#: Instancia global del expansor, construida una sola vez con el diccionario
+#: :data:`ABREVIATURAS`. Se reutiliza en todas las llamadas del módulo.
+EXPANSOR: ExpansorAbreviaturas = ExpansorAbreviaturas(ABREVIATURAS)
+
+
 def _expandir_abreviaturas(texto: str) -> str:
-    """Expande abreviaturas a términos completos para mejorar comprensión del modelo."""
-    for abrev, completo in ABREVIATURAS.items():
-        if "." in abrev or " " in abrev:
-            texto = texto.replace(abrev, completo)
-        else:
-            texto = re.sub(fr'\b{re.escape(abrev)}\b', completo, texto)
-    return texto
+    """Wrapper de módulo que delega en la instancia global :data:`EXPANSOR`.
+
+    Args:
+        texto: Texto con posibles abreviaturas de ejercicios.
+
+    Returns:
+        Texto con abreviaturas expandidas, o ``""`` si la entrada es vacía.
+    """
+    return EXPANSOR.expandir(texto)
+
+
+# ─────────────────────────────────────────────────────────────────
+# DETECCIÓN DE FORMATO TABULAR
+# ─────────────────────────────────────────────────────────────────
+
+#: Tokens que identifican líneas de metadatos (encabezado del plan de entrenamiento).
+#: Estas líneas se excluyen del análisis heurístico de columnas en :func:`_es_tabla`.
+_TOKENS_METADATOS: tuple = ("mesociclo", "semana", "sesion", "session", "week")
+
 
 def _es_tabla(texto: str) -> bool:
-    """Detecta si el texto tiene formato tabular (contiene tabs o columnas separadas por espacios múltiples)."""
+    """Detecta si el texto tiene estructura tabular (columnas alineadas o con tab).
+
+    Heurística en dos pasos:
+
+    1. **Tabulaciones**: si al menos la mitad de las líneas contienen ``\\t``,
+       se considera tabla.
+    2. **Espaciado múltiple**: si al menos la mitad de las líneas *de datos*
+       (excluyendo líneas de metadatos) contienen dos o más espacios
+       consecutivos entre tokens, se considera tabla.
+
+    Las líneas de metadatos ("Mesociclo", "Semana", "Sesion"…) se excluyen
+    del análisis para evitar falsos positivos en textos con una sola línea
+    de cabecera.
+
+    Args:
+        texto: Texto posiblemente tabular.
+
+    Returns:
+        ``True`` si el texto parece tabular, ``False`` en caso contrario.
+
+    Examples:
+        >>> _es_tabla("Ejercicio\\tReps\\tPeso\\nPress Banca\\t3\\t80")
+        True
+        >>> _es_tabla("Haz 3 series de press banca con 80 kg")
+        False
+    """
     lineas = [l for l in texto.strip().splitlines() if l.strip()]
     if len(lineas) < 2:
         return False
-    # Si más de la mitad de las líneas contienen tabuladores, es tabla
-    con_tab = sum(1 for l in lineas if '\t' in l)
-    return con_tab >= len(lineas) // 2
 
-def _extraer_metadatos(texto: str) -> dict:
-    """
-    Busca en el texto las etiquetas de mesociclo, semana y sesion
-    que el entrenador escribe encima de la tabla.
-    Acepta variaciones: 'Mesociclo 9', 'Mesociclo9', 'Semana 55', 'Sesion 71', 'Sesion P1', etc.
-    """
-    texto_lower = texto.lower()
-    meta = {"mesociclo": None, "semana": None, "sesion": None}
+    # Criterio 1: mayoría de líneas con tabuladores
+    con_tab = sum(1 for l in lineas if "\t" in l)
+    if con_tab >= max(1, len(lineas) // 2):
+        return True
 
-    m = re.search(r'mesociclo\s*(\w+)', texto_lower)
+    # Criterio 2: líneas de datos (sin metadatos) con espaciado múltiple
+    lineas_datos = [
+        l for l in lineas
+        if not any(
+            token in _normalizar_texto_base(l)
+            for token in _TOKENS_METADATOS
+        )
+    ]
+
+    if not lineas_datos:
+        return False
+
+    umbral = max(1, math.ceil(len(lineas_datos) / 2))
+    con_columnas = sum(
+        1 for l in lineas_datos if re.search(r"\S+\s{2,}\S+", l)
+    )
+    return con_columnas >= umbral
+
+
+# ─────────────────────────────────────────────────────────────────
+# EXTRACCIÓN DE METADATOS
+# ─────────────────────────────────────────────────────────────────
+
+def _extraer_metadatos(texto: str) -> Dict[str, Optional[str]]:
+    """Extrae metadatos de planificación (mesociclo, semana, sesión) del texto.
+
+    Busca patrones del tipo ``"Mesociclo 9"``, ``"Semana 55"``,
+    ``"Sesion P1"`` usando expresiones regulares sobre el texto normalizado.
+
+    Args:
+        texto: Texto OCR que puede contener líneas de cabecera.
+
+    Returns:
+        Diccionario con claves ``"mesociclo"``, ``"semana"`` y ``"sesion"``.
+        Cada valor es la cadena encontrada (p.ej. ``"9"``, ``"55"``, ``"P1"``)
+        o ``None`` si no se encontró.
+
+    Examples:
+        >>> _extraer_metadatos("Mesociclo 9  Semana 55  Sesion P1")
+        {'mesociclo': '9', 'semana': '55', 'sesion': 'p1'}
+    """
+    t = _normalizar_texto_base(texto)
+    meta: Dict[str, Optional[str]] = {
+        "mesociclo": None,
+        "semana": None,
+        "sesion": None,
+    }
+
+    m = re.search(r"\bmesociclo\s*([a-z0-9]+)\b", t, re.IGNORECASE)
     if m:
         meta["mesociclo"] = m.group(1)
 
-    s = re.search(r'semana\s*(\w+)', texto_lower)
+    s = re.search(r"\bsemana\s*([a-z0-9]+)\b", t, re.IGNORECASE)
     if s:
         meta["semana"] = s.group(1)
 
-    se = re.search(r'sesi[oó]n\s*([\w]+)', texto_lower)
+    se = re.search(r"\b(?:sesion|ses)\s*([a-z0-9]+)\b", t, re.IGNORECASE)
     if se:
         meta["sesion"] = se.group(1)
 
     return meta
 
-def _parsear_tabla(texto: str) -> list[dict]:
+
+# ─────────────────────────────────────────────────────────────────
+# HELPERS DE PARSING
+# ─────────────────────────────────────────────────────────────────
+
+#: Patrón para detectar series con formato ``NxPESO`` o ``N × PESO``.
+#: Captura grupos nombrados ``reps`` (entero) y ``peso`` (decimal con coma o punto).
+_PATRON_SERIE: re.Pattern = re.compile(
+    r"(?P<reps>\d+)\s*[xX×]\s*(?P<peso>[\d.,]+)",
+    re.IGNORECASE,
+)
+
+
+def _normalizar_nombre_ejercicio(nombre: str) -> str:
+    """Normaliza el nombre de un ejercicio para presentación.
+
+    Pasos:
+    1. Expande abreviaturas con :func:`_expandir_abreviaturas`.
+    2. Colapsa espacios múltiples.
+    3. Aplica ``.title()`` para capitalizar cada primera letra.
+
+    Args:
+        nombre: Nombre crudo del ejercicio (puede contener abreviaturas).
+
+    Returns:
+        Nombre normalizado y capitalizado, o ``""`` si la entrada es vacía.
+
+    Examples:
+        >>> _normalizar_nombre_ejercicio("elev lat")
+        'Elevaciones Laterales'
+        >>> _normalizar_nombre_ejercicio("")
+        ''
     """
-    Parsea texto en formato tabla (separado por tabuladores).
-    Formato esperado:
-        Ejercicio  Rango   Serie1   Serie2   Serie3
-        Dom        30      5 x 30   4 x 30   4 x 30
-    
-    Devuelve una lista de dicts con ejercicio, rango y lista de series {reps, peso}.
+    if not nombre:
+        return ""
+    nombre = _expandir_abreviaturas(nombre)
+    nombre = re.sub(r"\s+", " ", nombre).strip()
+    return nombre.title()
+
+
+def _parsear_serie(celda: str) -> Optional[Dict[str, Any]]:
+    """Intenta extraer repeticiones y peso de una celda de tabla.
+
+    Reconoce el formato ``NxPESO``, ``N × PESO`` y variantes (mayúsculas,
+    coma decimal). Si la celda no contiene el patrón esperado, o si los
+    valores no son convertibles a número, devuelve ``None``.
+
+    Args:
+        celda: Contenido de una celda del OCR (p.ej. ``"10x42,5"``).
+
+    Returns:
+        Diccionario ``{"reps": int, "peso_kg": float}`` o ``None`` si la
+        celda está vacía, malformada o no contiene series.
+
+    Examples:
+        >>> _parsear_serie("10x42,5")
+        {'reps': 10, 'peso_kg': 42.5}
+        >>> _parsear_serie("—")
+        None
+        >>> _parsear_serie("10xabc")
+        None
+    """
+    if not celda:
+        return None
+
+    celda = _normalizar_texto_base(celda)
+    match = _PATRON_SERIE.search(celda)
+    if not match:
+        return None
+
+    try:
+        reps = int(match.group("reps"))
+        peso_str = match.group("peso").replace(",", ".")
+        peso = float(peso_str)
+    except (ValueError, AttributeError):
+        return None
+
+    return {"reps": reps, "peso_kg": peso}
+
+
+def _split_columnas(linea: str) -> List[str]:
+    """Divide una línea en columnas usando tabulaciones o espaciado múltiple.
+
+    Preferencia: si la línea contiene tabulaciones (``\\t``), se parte
+    por ellas. Caso contrario, se usa dos o más espacios consecutivos
+    como separador.
+
+    Args:
+        linea: Línea de texto (ya sin newline al final).
+
+    Returns:
+        Lista de strings no vacíos con el contenido de cada columna.
+
+    Examples:
+        >>> _split_columnas("Press Banca\\t7-12\\t10x80")
+        ['Press Banca', '7-12', '10x80']
+        >>> _split_columnas("Sentadilla  5-8  8x120  8x120")
+        ['Sentadilla', '5-8', '8x120', '8x120']
+    """
+    if "\t" in linea:
+        return [c.strip() for c in re.split(r"\t+", linea.strip()) if c.strip()]
+    return [c.strip() for c in re.split(r"\s{2,}", linea.strip()) if c.strip()]
+
+
+# ─────────────────────────────────────────────────────────────────
+# PARSER TABULAR
+# ─────────────────────────────────────────────────────────────────
+
+#: Nombres de columnas que indican una fila de cabecera a descartar.
+_CABECERAS_TABLA: tuple = ("ejercicio", "exercise", "serie", "rango")
+
+#: Tokens que identifican filas de metadatos (se descartan en el parser tabular).
+_TOKENS_SKIP_TABLA: tuple = ("ejercicio", "exercise", "mesociclo", "semana", "sesion")
+
+
+def _parsear_tabla(texto: str) -> List[Dict[str, Any]]:
+    """Parsea texto tabular OCR y extrae una lista de ejercicios estructurados.
+
+    Formato esperado (con tabs o espaciado doble)::
+
+        Mesociclo 9  Semana 55  Sesion 71
+        Ejercicio  Rango  Serie 1  Serie 2  Serie 3  Serie 4
+        Press Banca  7-12  10x80  9x80  8x82
+        Remo  6-10  10x110  9x115
+
+    Lógica:
+    1. Extrae metadatos de la primera línea si contiene palabras clave.
+    2. Detecta y omite filas de cabecera (Ejercicio / Exercise / Rango…).
+    3. Para cada fila de datos: columna 0 → ejercicio, columna 1 → rango,
+       columnas 2+ → series (parseadas con :func:`_parsear_serie`).
+    4. Omite filas cuyo primer token es un token de metadatos.
+
+    Args:
+        texto: Texto tabular procedente de OCR.
+
+    Returns:
+        Lista de diccionarios con la estructura::
+
+            {
+                "ejercicio":      str,            # nombre normalizado
+                "rango_objetivo": str,            # p.ej. "7-12" o "—"
+                "series":         List[dict],     # [{"reps": int, "peso_kg": float}, ...]
+                "origen":         "tabla",
+                "mesociclo":      str | None,
+                "semana":         str | None,
+                "sesion":         str | None,
+            }
+
+        Lista vacía si el texto está vacío o no contiene filas de datos.
     """
     lineas = [l for l in texto.strip().splitlines() if l.strip()]
-    resultados = []
+    resultados: List[Dict[str, Any]] = []
 
-    # Saltar la cabecera (primera línea)
-    datos = lineas[1:]
+    if not lineas:
+        return resultados
 
-    # Regex para capturar "REP x PESO" o "REP X PESO" o "REP x PESO,5"
-    patron_serie = re.compile(r'(\d+)\s*[xX]\s*([\d.,]+)', re.IGNORECASE)
+    meta = _extraer_metadatos(texto)
+
+    # Determinar desde qué línea empiezan los datos (saltar cabecera si existe)
+    datos = lineas[:]
+    primera_norm = _normalizar_texto_base(lineas[0])
+    if any(x in primera_norm for x in _CABECERAS_TABLA):
+        datos = lineas[1:]
 
     for linea in datos:
-        columnas = re.split(r'\t+', linea.strip())
+        columnas = _split_columnas(linea)
         if not columnas:
             continue
 
         nombre_raw = columnas[0].strip()
         if not nombre_raw:
             continue
-        
-        # Saltar la fila de cabecera de columnas ("Ejercicio", "Rango", "Serie 1"...)
-        if nombre_raw.lower() in ("ejercicio", "exercise"):
+
+        nombre_norm = _normalizar_texto_base(nombre_raw)
+
+        # Saltar filas de metadatos o cabeceras residuales
+        if any(token in nombre_norm for token in _TOKENS_SKIP_TABLA):
             continue
 
-        nombre_expandido = _expandir_abreviaturas(nombre_raw.lower()).strip().title()
+        ejercicio = _normalizar_nombre_ejercicio(nombre_raw)
         rango = columnas[1].strip() if len(columnas) > 1 else "—"
 
-        series = []
+        series: List[Dict[str, Any]] = []
         for celda in columnas[2:]:
-            celda = celda.strip()
-            match = patron_serie.search(celda)
-            if match:
-                reps = int(match.group(1))
-                peso_str = match.group(2).replace(",", ".")
-                peso = float(peso_str)
-                series.append({"reps": reps, "peso_kg": peso})
+            parsed = _parsear_serie(celda)
+            if parsed:
+                series.append(parsed)
 
         resultados.append({
-            "ejercicio": nombre_expandido,
+            "ejercicio":      ejercicio,
             "rango_objetivo": rango,
-            "series": series,
-            "origen": "tabla"
+            "series":         series,
+            "origen":         "tabla",
+            "mesociclo":      meta["mesociclo"],
+            "semana":         meta["semana"],
+            "sesion":         meta["sesion"],
         })
-
-    # Adjuntar metadatos a cada ejercicio
-    meta = _extraer_metadatos(texto)
-    for r in resultados:
-        r["mesociclo"] = meta["mesociclo"]
-        r["semana"]    = meta["semana"]
-        r["sesion"]    = meta["sesion"]
 
     return resultados
 
-class GlinerService:
-    _modelo = None
 
-    def __init__(self):
-        """Inicializa el modelo GLiNER de forma perezosa (Lazy Load) para no bloquear el inicio de la app."""
-        self.labels = [
+# ─────────────────────────────────────────────────────────────────
+# SERVICIO PRINCIPAL — GlinerService
+# ─────────────────────────────────────────────────────────────────
+
+class GlinerService:
+    """Servicio principal de extracción de datos de rutinas de entrenamiento.
+
+    Orquesta dos estrategias de extracción:
+
+    - **Parser tabular** (:func:`_parsear_tabla`): rápido, determinista,
+      no requiere modelo. Se activa cuando :func:`_es_tabla` devuelve ``True``.
+    - **GLiNER** (NER neuronal): extrae entidades (ejercicio, series,
+      repeticiones, peso, descanso) de texto libre mediante el modelo
+      ``urchade/gliner_multi-v2.1``.
+
+    El modelo GLiNER se carga de forma perezosa (lazy-loading) la primera
+    vez que se necesita y se almacena como atributo de clase (singleton)
+    para evitar cargarlo múltiples veces en la misma sesión.
+
+    .. warning::
+        El singleton ``_modelo`` no es thread-safe. En entornos con múltiples
+        hilos concurrentes la primera carga puede ejecutarse varias veces.
+        Se recomienda pre-cargar el modelo con ``cargar_modelo()`` durante
+        la inicialización de la aplicación.
+
+    Args:
+        cargar_modelo_al_inicio: Si ``True``, carga el modelo GLiNER
+            inmediatamente en el constructor. Por defecto ``False`` (lazy).
+        threshold: Umbral de confianza mínimo para aceptar entidades GLiNER.
+            Entidades con score **menor** que este valor se descartan.
+            Por defecto :data:`THRESHOLD_DEFAULT` (0.4).
+
+    Attributes:
+        labels (List[str]): Etiquetas de entidad que reconoce GLiNER.
+        model_name (str): Nombre del modelo en HuggingFace Hub.
+        threshold (float): Umbral de confianza activo.
+
+    Example::
+
+        serv = GlinerService()
+        resultados = serv.procesar_texto_rutina(texto_ocr)
+
+        # Forzar carga previa del modelo (útil en aplicaciones de escritorio)
+        serv = GlinerService(cargar_modelo_al_inicio=True)
+    """
+
+    #: Singleton del modelo GLiNER compartido entre todas las instancias.
+    _modelo: Any = None
+
+    def __init__(
+        self,
+        cargar_modelo_al_inicio: bool = False,
+        threshold: float = THRESHOLD_DEFAULT,
+    ) -> None:
+        self.labels: List[str] = [
             "ejercicio",
             "series",
             "repeticiones",
             "peso en kg",
             "descanso",
         ]
-        self.model_name = "urchade/gliner_multi-v2.1"
+        self.model_name: str = MODEL_NAME
+        self.threshold: float = threshold
 
-    def cargar_modelo(self):
+        if cargar_modelo_al_inicio:
+            self.cargar_modelo()
+
+    # ── Carga del modelo ─────────────────────────────────────────────────
+
+    def cargar_modelo(self) -> None:
+        """Carga el modelo GLiNER desde HuggingFace (o caché local) si aún no está cargado.
+
+        Es idempotente: si el modelo ya está en ``GlinerService._modelo``,
+        no hace nada. Registra el proceso en el logger de la aplicación.
+
+        Raises:
+            Exception: Cualquier error de descarga o carga del modelo
+                se registra en el logger y se re-lanza para que el
+                caller pueda manejarlo.
+        """
         if GlinerService._modelo is None:
-            app_logger.info(f"Cargando modelo GLiNER ({self.model_name}) en {MODEL_DIR}...")
+            app_logger.info(
+                f"Cargando modelo GLiNER ({self.model_name}) en {MODEL_DIR}..."
+            )
             try:
                 GlinerService._modelo = GLiNER.from_pretrained(self.model_name)
                 app_logger.info("Modelo GLiNER cargado correctamente.")
             except Exception as e:
                 app_logger.error(f"Error cargando GLiNER: {e}")
-                raise e
+                raise
 
-    def _procesar_texto_libre(self, texto: str) -> list[dict]:
-        """Usa GLiNER para extraer entidades de texto no estructurado."""
+    # ── Métodos públicos de utilidad (también usados en tests) ───────────
+
+    def expandir_abreviaturas(self, texto: str) -> str:
+        """Expande abreviaturas de ejercicios en el texto dado.
+
+        Wrapper público de :func:`_expandir_abreviaturas` para uso directo
+        en tests o scripts de inspección sin acceder a funciones privadas.
+
+        Args:
+            texto: Texto con posibles abreviaturas.
+
+        Returns:
+            Texto con abreviaturas expandidas.
+        """
+        return _expandir_abreviaturas(texto)
+
+    def diagnosticar_abreviaturas(self, texto: str) -> Dict[str, Any]:
+        """Devuelve diagnóstico detallado de las expansiones aplicadas.
+
+        Wrapper público de :meth:`ExpansorAbreviaturas.diagnosticar`.
+
+        Args:
+            texto: Texto a diagnosticar.
+
+        Returns:
+            Diccionario con ``original``, ``normalizado``, ``expandido`` y
+            ``abreviaturas_detectadas``. Ver :meth:`ExpansorAbreviaturas.diagnosticar`.
+        """
+        return EXPANSOR.diagnosticar(texto)
+
+    def es_tabla(self, texto: str) -> bool:
+        """Comprueba si el texto tiene estructura tabular.
+
+        Wrapper público de :func:`_es_tabla`.
+
+        Args:
+            texto: Texto a evaluar.
+
+        Returns:
+            ``True`` si se detecta formato tabular.
+        """
+        return _es_tabla(texto)
+
+    def extraer_metadatos(self, texto: str) -> Dict[str, Optional[str]]:
+        """Extrae metadatos de planificación del texto.
+
+        Wrapper público de :func:`_extraer_metadatos`.
+
+        Args:
+            texto: Texto con posible cabecera de mesociclo/semana/sesión.
+
+        Returns:
+            Diccionario ``{"mesociclo": ..., "semana": ..., "sesion": ...}``.
+        """
+        return _extraer_metadatos(texto)
+
+    def parsear_tabla(self, texto: str) -> List[Dict[str, Any]]:
+        """Fuerza el uso del parser tabular sobre el texto dado.
+
+        Útil en tests para verificar el parser sin pasar por la detección
+        automática de formato.
+
+        Wrapper público de :func:`_parsear_tabla`.
+
+        Args:
+            texto: Texto tabular.
+
+        Returns:
+            Lista de ejercicios estructurados.
+        """
+        return _parsear_tabla(texto)
+
+    def preprocesar_texto_libre(self, texto: str) -> str:
+        """Devuelve el texto preprocesado que se enviará a GLiNER.
+
+        Útil para inspeccionar qué ve exactamente el modelo antes de la
+        predicción. Wrapper público de :meth:`_preprocesar_texto_libre`.
+
+        Args:
+            texto: Texto libre de entrada.
+
+        Returns:
+            Texto normalizado y con expresiones expandidas listo para GLiNER.
+        """
+        return self._preprocesar_texto_libre(texto)
+
+    # ── Métodos privados ─────────────────────────────────────────────────
+
+    def _preprocesar_texto_libre(self, texto: str) -> str:
+        """Preprocesa texto libre para optimizar la extracción de entidades por GLiNER.
+
+        Pasos:
+        1. Normalización base (:func:`_normalizar_texto_base`).
+        2. Expansión de abreviaturas (:func:`_expandir_abreviaturas`).
+        3. Conversión de formato ``NxPESO`` → ``"N repeticiones con PESO kg"``.
+        4. Normalización de expresiones ``p/mano`` y ``x/mano`` → ``"por mano"``.
+        5. Conversión de segundos en formato ``''`` / ``"`` y ``Ns`` → ``"N segundos"``.
+        6. Colapso final de espacios.
+
+        Args:
+            texto: Texto libre (OCR de imagen no tabular).
+
+        Returns:
+            Texto enriquecido listo para ser consumido por GLiNER.
+        """
+        texto = _normalizar_texto_base(texto)
+        texto = _expandir_abreviaturas(texto)
+
+        # "10 x 80" → "10 repeticiones con 80 kg"
+        texto = re.sub(
+            r"(\d+)\s*[xX×]\s*([\d.,]+)\b",
+            r"\1 repeticiones con \2 kg",
+            texto,
+            flags=re.IGNORECASE,
+        )
+
+        # "p/mano" / "x mano" → "por mano"
+        texto = re.sub(r"\bp\s*/\s*mano\b", "por mano", texto, flags=re.IGNORECASE)
+        texto = re.sub(r"\bx\s*mano\b", "por mano", texto, flags=re.IGNORECASE)
+
+        # "30''" / "30s" → "30 segundos"
+        texto = re.sub(r"(\d+)\s*(?:''|\")", r"\1 segundos", texto)
+        texto = re.sub(r"\b(\d+)\s*s\b", r"\1 segundos", texto)
+
+        texto = re.sub(r"\s+", " ", texto).strip()
+        return texto
+
+    def _procesar_texto_libre(self, texto: str) -> List[Dict[str, Any]]:
+        """Procesa texto libre con el modelo GLiNER y devuelve entidades detectadas.
+
+        Carga el modelo si aún no está disponible, preprocesa el texto y
+        filtra las entidades por el umbral de confianza configurado.
+
+        Args:
+            texto: Texto libre de rutina de entrenamiento.
+
+        Returns:
+            Lista de diccionarios con la estructura::
+
+                {
+                    "tipo":      str,    # etiqueta GLiNER (ej. "ejercicio")
+                    "texto":     str,    # texto detectado (normalizado si es ejercicio)
+                    "confianza": float,  # score redondeado a 2 decimales
+                    "origen":    "gliner"
+                }
+
+            Las entidades con ``score < threshold`` se descartan.
+        """
         self.cargar_modelo()
 
-        texto_limpio = texto.lower()
-        texto_limpio = _expandir_abreviaturas(texto_limpio)
-        # Normalizar "NxM" -> "N repeticiones con M kg"
-        texto_limpio = re.sub(r'(\d+)\s*[xX]\s*([\d.,]+)', r'\1 repeticiones con \2 kg', texto_limpio)
-        texto_limpio = re.sub(r'\bp/mano\b', 'por mano', texto_limpio)
-
+        texto_limpio = self._preprocesar_texto_libre(texto)
         app_logger.info("Analizando texto libre con GLiNER...")
         entidades = GlinerService._modelo.predict_entities(texto_limpio, self.labels)
 
-        return [
-            {
-                "tipo": e["label"],
-                "texto": e["text"],
-                "confianza": round(e["score"], 2),
-                "origen": "gliner"
-            }
-            for e in entidades if e["score"] > 0.4
-        ]
+        resultados: List[Dict[str, Any]] = []
+        for e in entidades:
+            score = round(e["score"], 2)
+            # Se usa < (no <=) para incluir exactamente el valor del umbral
+            if score < self.threshold:
+                continue
 
-    def procesar_texto_rutina(self, texto_ocr: str):
+            texto_entidad = e["text"].strip()
+            if e["label"] == "ejercicio":
+                texto_entidad = _normalizar_nombre_ejercicio(texto_entidad)
+
+            resultados.append({
+                "tipo":      e["label"],
+                "texto":     texto_entidad,
+                "confianza": score,
+                "origen":    "gliner",
+            })
+
+        return resultados
+
+    # ── Métodos de entrada principal ─────────────────────────────────────
+
+    def procesar_texto_rutina(self, texto_ocr: str) -> List[Dict[str, Any]]:
+        """Punto de entrada principal para extraer datos de una rutina de entrenamiento.
+
+        Detecta automáticamente el formato del texto y delega al parser
+        más adecuado:
+
+        - **Texto tabular** → :func:`_parsear_tabla` (sin modelo).
+        - **Texto libre** → :meth:`_procesar_texto_libre` (requiere GLiNER).
+
+        Args:
+            texto_ocr: Texto extraído por OCR de una imagen de plan de entrenamiento.
+                Puede ser tabular (con tabs o columnas alienadas) o texto libre.
+
+        Returns:
+            - Si es tabular: lista de ejercicios con la estructura de
+              :func:`_parsear_tabla`.
+            - Si es libre: lista de entidades con la estructura de
+              :meth:`_procesar_texto_libre`.
+            - Lista vacía si el texto está vacío o solo contiene espacios.
+
+        Example::
+
+            serv = GlinerService()
+            resultado = serv.procesar_texto_rutina(
+                "Press Banca\\t7-12\\t10x80\\t9x80"
+            )
+            # resultado[0]["ejercicio"] == "Press Banca"
         """
-        Punto de entrada principal.
-        - Si el texto es tabular: lo parsea directamente (precisión 100%).
-        - Si es texto libre: usa GLiNER para NER.
-        Devuelve siempre una lista de dicts con los datos extraídos.
-        """
+        if not texto_ocr or not texto_ocr.strip():
+            return []
+
         if _es_tabla(texto_ocr):
             app_logger.info("Formato tabular detectado. Usando parser directo.")
             return _parsear_tabla(texto_ocr)
+
+        return self._procesar_texto_libre(texto_ocr)
+
+    def procesar_texto_rutina_debug(self, texto_ocr: str) -> Dict[str, Any]:
+        """Versión de diagnóstico de :meth:`procesar_texto_rutina` con trazabilidad completa.
+
+        Devuelve el resultado de la extracción junto con información
+        intermedia del procesamiento: texto expandido, modo detectado,
+        metadatos encontrados y texto preprocesado para GLiNER.
+
+        No sustituye al método principal; lo complementa para depuración
+        y testing.
+
+        Args:
+            texto_ocr: Texto extraído por OCR (tabular o libre).
+
+        Returns:
+            Diccionario con las claves:
+
+            - ``"entrada_original"`` (str): El texto tal como se recibió.
+            - ``"modo_detectado"`` (str | None): ``"tabla"``, ``"gliner"`` o ``None``.
+            - ``"es_tabla"`` (bool): Resultado de :func:`_es_tabla`.
+            - ``"metadatos"`` (dict): Resultado de :func:`_extraer_metadatos`.
+            - ``"texto_expandido"`` (str): Texto tras expansión de abreviaturas.
+            - ``"texto_preprocesado_gliner"`` (str): Texto listo para GLiNER.
+            - ``"resultado"`` (list): Mismo resultado que :meth:`procesar_texto_rutina`.
+
+        Example::
+
+            info = serv.procesar_texto_rutina_debug("Curl bien 3x15")
+            print(info["modo_detectado"])          # "gliner"
+            print(info["texto_expandido"])         # "curl predicador 3x15"
+        """
+        if not texto_ocr or not texto_ocr.strip():
+            return {
+                "entrada_original":          texto_ocr,
+                "modo_detectado":            None,
+                "es_tabla":                  False,
+                "metadatos":                 {"mesociclo": None, "semana": None, "sesion": None},
+                "texto_expandido":           "",
+                "texto_preprocesado_gliner": "",
+                "resultado":                 [],
+            }
+
+        es_tabla = _es_tabla(texto_ocr)
+        metadatos = _extraer_metadatos(texto_ocr)
+        texto_expandido = _expandir_abreviaturas(texto_ocr)
+        texto_preprocesado = self._preprocesar_texto_libre(texto_ocr)
+
+        if es_tabla:
+            resultado = _parsear_tabla(texto_ocr)
+            modo = "tabla"
         else:
-            return self._procesar_texto_libre(texto_ocr)
+            resultado = self._procesar_texto_libre(texto_ocr)
+            modo = "gliner"
+
+        return {
+            "entrada_original":          texto_ocr,
+            "modo_detectado":            modo,
+            "es_tabla":                  es_tabla,
+            "metadatos":                 metadatos,
+            "texto_expandido":           texto_expandido,
+            "texto_preprocesado_gliner": texto_preprocesado,
+            "resultado":                 resultado,
+        }
