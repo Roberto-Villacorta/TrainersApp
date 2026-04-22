@@ -2,8 +2,42 @@ import pytesseract
 from PIL import Image, ImageOps, ImageFilter
 import logging
 import os
+import sys
 
 logger = logging.getLogger(__name__)
+
+# ===========================================================================
+# CONFIGURACIÓN DE TESSERACT (PARA PORTABILIDAD)
+# ===========================================================================
+def configurar_tesseract():
+    """
+    Busca el ejecutable de Tesseract en rutas comunes y en la carpeta local 'bin'
+    para permitir que la aplicación sea compartida sin instalaciones manuales.
+    """
+    # 1. Si ya está en el PATH del sistema, no hacemos nada (pytesseract lo encontrará)
+    # Pero para asegurar en Windows, definimos rutas probables:
+    
+    # Ruta relativa para cuando compartas la carpeta con una versión portable en /bin
+    ruta_local_bin = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "tesseract.exe")
+    
+    # Rutas típicas de instalación en Windows
+    rutas_instalacion = [
+        ruta_local_bin,
+        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+        os.path.join(os.environ.get('LOCALAPPDATA', ''), r'Tesseract-OCR\tesseract.exe')
+    ]
+    
+    for ruta in rutas_instalacion:
+        if os.path.exists(ruta):
+            pytesseract.pytesseract.tesseract_cmd = ruta
+            logger.info(f"Tesseract configurado en: {ruta}")
+            return True
+            
+    logger.warning("No se encontró Tesseract en las rutas comunes. Asegúrate de que esté en el PATH.")
+    return False
+
+# Ejecutamos la configuración al importar el módulo
+configurar_tesseract()
 
 class OCRProcessor:
     """
