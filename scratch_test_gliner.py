@@ -41,6 +41,13 @@ test_cases = [
     "Aductor\t20-21\t21x70\t21x70\t21x70\t\n"
     "Gom\t21-30\t30x60\t30x60\t26x30\t\n"
     "Pres millo\t10-12\t8x27\t11x30\t11x30\t",
+
+    # CASOS LÍMITE (TRUNCAMIENTOS EXTREMOS Y ARTEFACTOS)
+    "Caso Limite 1: Truncamiento extremo\np pla\t7-12\t3x120\next tri\t10-12\t10x30\nc bay\t12-15\t12x15",
+    
+    "Caso Limite 2: OCR ruidoso y pegado\nPM.RDL_3x100\nB.DIAS_3x80\nDOM-SUP_8reps",
+    
+    "Caso Limite 3: Tabla malformada\nEjercicio\tRango\tSerie 1\nPressManc\t10\t\t10x30\nMartillo\t\t12x15\n"
 ]
 
 # ──────────────────────────────────────────────

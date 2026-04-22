@@ -158,6 +158,46 @@ def _normalizar_clave_abrev(clave: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────
+# Catálogo de Ejercicios Canónicos (Memoria de la IA)
+# ─────────────────────────────────────────────────────────────────
+
+#: Lista exhaustiva de nombres de ejercicios normalizados.
+#: Se utiliza como etiquetas (labels) para GLiNER en el paso de
+#: Zero-shot Classification para normalización inteligente.
+EJERCICIOS_CANONICOS: List[str] = [
+    # Pecho
+    "press plano", "press inclinado", "press declinado", "press banca",
+    "press con mancuernas", "aperturas", "aperturas con mancuernas",
+    "cruce en polea", "fondos", "peck deck", "press hammer",
+    # Espalda
+    "dominadas", "dominadas supinas", "dominadas pronas", "dominadas neutras",
+    "jalon", "jalon al pecho", "jalon tras nuca", "remo", "remo con mancuernas",
+    "remo con barra", "remo en polea", "remo en t", "pullover", "tiron dominadas",
+    "remo horizontal", "remo pendlay", "remo unipolar", "lumbares",
+    # Hombro
+    "elevaciones laterales", "elevaciones frontales", "elevaciones posteriores",
+    "pajaro", "face pull", "press hombro", "press militar", "press arnold",
+    "encogimientos", "press tras nuca", "upright row",
+    # Pierna
+    "sentadilla", "sentadilla trasera", "sentadilla frontal", "sentadilla bulgara",
+    "zancadas", "prensa", "extension cuadriceps", "curl femoral",
+    "curl femoral tumbado", "curl femoral sentado", "hip thrust", "puente gluteo",
+    "abduccion", "aduccion", "gemelos", "elevaciones de gemelos",
+    "peso muerto", "peso muerto convencional", "peso muerto sumo",
+    "peso muerto rumano", "hack squat", "leg press", "step up", "glute bridge",
+    # Brazos
+    "curl", "curl con barra", "curl con barra z", "curl con mancuernas",
+    "curl martillo", "martillo continuo", "curl predicador", "curl concentrado",
+    "curl bayesian", "extensiones triceps", "extensiones triceps cuerda",
+    "extensiones triceps polea", "extensiones trasnuca", "press cerrado",
+    "patada triceps", "dips", "skullcrushers", "frances", "curl araña",
+    # Core / Cardio / Otros
+    "abdominales", "crunch", "plancha", "elevaciones de piernas", "ab wheel",
+    "cinta", "bicicleta", "remo ergometro", "descanso", "burpees", "jumping jacks"
+]
+
+
+# ─────────────────────────────────────────────────────────────────
 # DICCIONARIO DE ABREVIATURAS
 # ─────────────────────────────────────────────────────────────────
 
@@ -384,9 +424,11 @@ class ExpansorAbreviaturas:
     def __init__(self, abreviaturas: Dict[str, str]) -> None:
         self.abreviaturas_originales = abreviaturas
         self.abreviaturas = self._normalizar_diccionario(abreviaturas)
-        #: Conjunto de expansiones conocidas para lookup O(1) en el paso de enriquecimiento.
-        #: Permite saber si un nombre ya es el resultado de una expansión válida.
-        self.valores_conocidos: set = set(self.abreviaturas.values())
+        #: Conjunto de expansiones conocidas para lookup O(1).
+        #: Incluye los valores del dict y el catálogo canónico completo.
+        self.valores_conocidos: set = set(self.abreviaturas.values()) | set(
+            _normalizar_texto_base(e) for e in EJERCICIOS_CANONICOS
+        )
         self.patrones = self._compilar_patrones()
 
     def _normalizar_diccionario(
@@ -1136,44 +1178,41 @@ class GlinerService:
     def _enriquecer_nombre_ejercicio(self, nombre: str, rango: str = "") -> str:
         """Intenta identificar o corregir un nombre de ejercicio usando GLiNER.
 
-        Se usa como fallback para nombres que el diccionario :data:`ABREVIATURAS`
-        no reconoció (ni como clave ni como valor de expansión). Construye una
-        frase de contexto corta para que el modelo disponga de señal semántica
-        suficiente.
+        Utiliza Zero-shot Classification: en lugar de buscar la etiqueta
+        genérica 'ejercicio', utiliza la lista de nombres canónicos como
+        etiquetas. Esto permite que el modelo mapee términos truncados o
+        incorrectos (ej. 'rem') directamente a un nombre completo (ej. 'Remo').
 
-        Requiere que :attr:`GlinerService._modelo` esté ya cargado; si no lo
-        está, devuelve el nombre con ``.title()`` sin lanzar error.
-
-        .. note::
-            GLiNER es un modelo de NER (extracción de entidades), no un
-            corrector ortográfico. Mejorará el reconocimiento en texto libre
-            o en contextos con suficiente señal, pero puede no corregir
-            truncaciones extremas de una sola letra.
+        Requiere que el modelo esté cargado.
 
         Args:
             nombre: Nombre del ejercicio a enriquecer (p.ej. ``"rem"``).
-            rango: Rango de repeticiones objetivo (p.ej. ``"6-10"``). Añade
-                contexto adicional al modelo.
+            rango: Rango para añadir contexto (p.ej. ``"6-10"``).
 
         Returns:
-            Nombre normalizado en Title Case según GLiNER, o ``nombre.title()``
-            si el modelo no genera ninguna entidad con confianza suficiente.
+            Nombre normalizado en Title Case según la mejor etiqueta de GLiNER.
         """
-        # Construir oración con contexto para dar más señal al modelo
+        # Contexto mínimo: solo el nombre y el rango para evitar dilución
         contexto = f"ejercicio {nombre}"
         if rango:
-            contexto += f" rango {rango} repeticiones"
+            contexto += f" {rango}"
+
+        # Usamos los ejercicios canónicos como etiquetas dinámicas
+        # Limitamos a un subconjunto relevante si fuera necesario por perf,
+        # pero para ~100 etiquetas GLiNER suele ser eficiente.
+        etiquetas = EJERCICIOS_CANONICOS
 
         try:
-            entidades = GlinerService._modelo.predict_entities(contexto, ["ejercicio"])
-            for e in entidades:
-                if e["label"] == "ejercicio" and round(e["score"], 2) >= self.threshold:
-                    texto = e["text"].strip()
-                    if texto:
-                        return _normalizar_nombre_ejercicio(texto)
+            entidades = GlinerService._modelo.predict_entities(contexto, etiquetas)
+            if entidades:
+                # Ordenar por score y elegir el mejor que supere el umbral
+                entidades.sort(key=lambda x: x["score"], reverse=True)
+                mejor = entidades[0]
+                if round(mejor["score"], 2) >= self.threshold:
+                    return _normalizar_nombre_ejercicio(mejor["label"])
         except Exception as exc:
             app_logger.warning(
-                f"GLiNER no pudo enriquecer el ejercicio '{nombre}': {exc}"
+                f"GLiNER no pudo normalizar el ejercicio '{nombre}': {exc}"
             )
 
         return nombre.title()
@@ -1193,8 +1232,8 @@ class GlinerService:
         reales del gym, dejando al modelo de IA la responsabilidad de cubrir
         variantes OCR, truncaciones y términos no catalogados.
 
-        Requiere que :attr:`GlinerService._modelo` esté ya cargado; si no lo
-        está, la función devuelve la lista sin modificaciones.
+        Si se detectan nombres no reconocidos, se carga el modelo GLiNER
+        automáticamente.
 
         Args:
             resultados: Lista de ejercicios del parser tabular.
@@ -1216,6 +1255,9 @@ class GlinerService:
             )
 
             if not es_reconocido:
+                # Cargar el modelo solo si realmente lo necesitamos (lazy loading)
+                self.cargar_modelo()
+                
                 app_logger.debug(
                     f"Nombre '{nombre_titulo}' no reconocido por ABREVIATURAS. "
                     "Intentando con GLiNER..."
@@ -1262,12 +1304,8 @@ class GlinerService:
         if _es_tabla(texto_ocr):
             app_logger.info("Formato tabular detectado. Usando parser directo.")
             resultado = _parsear_tabla(texto_ocr)
-            # Si el modelo ya está cargado, enriquecer con GLiNER los nombres
-            # que el diccionario de abreviaturas no reconoció.
-            if GlinerService._modelo is not None:
-                app_logger.info("Enriqueciendo nombres de ejercicio con GLiNER...")
-                resultado = self._enriquecer_ejercicios_tabla(resultado)
-            return resultado
+            # Enriquecer nombres con GLiNER (la carga es automática si se necesita)
+            return self._enriquecer_ejercicios_tabla(resultado)
 
         return self._procesar_texto_libre(texto_ocr)
 
@@ -1319,9 +1357,8 @@ class GlinerService:
 
         if es_tabla:
             resultado = _parsear_tabla(texto_ocr)
-            # Enriquecer con GLiNER si el modelo está cargado
-            if GlinerService._modelo is not None:
-                resultado = self._enriquecer_ejercicios_tabla(resultado)
+            # Enriquecer con GLiNER (la carga es automática si se necesita)
+            resultado = self._enriquecer_ejercicios_tabla(resultado)
             modo = "tabla"
         else:
             resultado = self._procesar_texto_libre(texto_ocr)

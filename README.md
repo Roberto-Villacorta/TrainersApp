@@ -146,78 +146,90 @@ python main.py
 ---
 
 Modulo de IA - ia_service
-
-Ubicacion: `logica/ia_service.py`
-
-Modulo central que extrae datos estrucurados de ejercicios a partir de texto OCR.
-
-Constantes configurables
-
-| Constante | Valor por defecto | Descripcion |
-|---|---|---|
-| `MODEL_NAME` | `"urchade/gliner_multi-v2.1"` | Modelo GLiNER en HuggingFace Hub |
-| `THRESHOLD_DEFAULT` | `0.4` | Umbral de confianza minimo para aceptar entidades |
-| `MODEL_DIR` | `<raiz>/modelos_ia` | Carpeta local de cache de modelos |
-
-Clase principal: GlinerService
-
-```python
-from logica.ia_service import GlinerService
-
-serv = GlinerService()
-
-# Procesar texto de OCR (tabular o libre)
-resultados = serv.procesar_texto_rutina(texto_ocr)
-
-# Procesar con trazabilidad completa (debug / tests)
-info = serv.procesar_texto_rutina_debug(texto_ocr)
-print(info["modo_detectado"])   # "tabla" | "gliner"
-print(info["metadatos"])        # {"mesociclo": "9", "semana": "55", "sesion": "71"}
-```
-
-Deteccion automatica de formato
-
-- Tabular (tabs o espacios dobles): parser directo deterministico, sin modelo neuronal.
-- Texto libre: el modelo GLiNER extrae entidades como ejercicio, series, repeticiones, peso en kg y descanso.
-
-Expansion de abreviaturas (ABREVIATURAS)
-
-Diccionario de unas 100 entradas que normaliza abreviaturas comunes de gym antes de pasar el texto al modelo:
-
-```
-"Elev lat"  →  "Elevaciones Laterales"
-"Kckton"    →  "Patada Triceps"
-"Sent bulg" →  "Sentadilla Bulgara"
-"Curl bien" →  "Curl Predicador"
-"pm rum"    →  "Peso Muerto Rumano"
-```
-
-Metadatos extraidos
-
-Si el texto contiene una cabecera de planificacion, se estraen automaticamente:
-
-| Campo | Ejemplo |
-|---|---|
-| `mesociclo` | `"9"` |
-| `semana` | `"55"` |
-| `sesion` | `"71"` o `"P1"` |
-
-Salida del parser tabular
-
-```python
-[
-  {
-    "ejercicio":      "Press Plano",
-    "rango_objetivo": "7-12",
-    "series":         [{"reps": 10, "peso_kg": 100.0}, ...],
-    "origen":         "tabla",
-    "mesociclo":      "9",
-    "semana":         "55",
-    "sesion":         "71"
-  },
-  ...
-]
-```
+ 
+ Ubicacion: logica/ia_service.py
+ 
+ Modulo central que extrae datos estrucurados de ejercicios a partir de texto OCR. Ahora incluye normalizacion inteligente mediante Zero-shot Clasificacion.
+ 
+ Constantes configurables
+ 
+ | Constante | Valor por defecto | Descripcion |
+ |---|---|---|
+ | MODEL_NAME | "urchade/gliner_multi-v2.1" | Modelo GLiNER en HuggingFace Hub |
+ | THRESHOLD_DEFAULT | 0.4 | Umbral de confianza minimo para aceptar entidades |
+ | MODEL_DIR | <raiz>/modelos_ia | Carpeta local de cache de modelos |
+ 
+ Clase principal: GlinerService
+ 
+ ```python
+ from logica.ia_service import GlinerService
+ 
+ serv = GlinerService()
+ 
+ # Procesar texto de OCR (tabular o libre)
+ # La IA se carga automaticamente si se necesia normalizar algo desconocido
+ resultados = serv.procesar_texto_rutina(texto_ocr)
+ 
+ # Procesar con trazabilidad completa (debug / tests)
+ info = serv.procesar_texto_rutina_debug(texto_ocr)
+ print(info["modo_detectado"])   # "tabla" | "gliner"
+ print(info["metadatos"])        # {"mesociclo": "9", "semana": "55", "sesion": "71"}
+ ```
+ 
+ Normalizacion inteligente con Zero-shot
+ 
+ El sistema ya no depeende solo de un diccionario fijo. Si el OCR debuelve un nombre truncado o ruidoso, el modelo GLiNER lo clasifica dentro de un catalogo de mas de 100 ejercicios canonicos:
+ 
+ - Entrada ruidosa: "rem"  →  IA detecta: "Remo"
+ - Entrada truncada: "p pla" →  IA detecta: "Press Plano"
+ - Entrada mal formada: "dom-sup" → IA detecta: "Dominadas Supinas"
+ 
+ Esto permite que el sitema funcione incluso si se borra la memoria o cache del modelo, ya que el conocimiento se inyecta dinamicamente como etiquetas en cada ejecucion.
+ 
+ Catalogo de ejercicios (EJERCICIOS_CANONICOS)
+ 
+ La aplicacion "conoce" mas de 100 ejercicios de forma natiba (pecho, espalda, pierna, hommo, core, etc.). Este catalogo se usa como un puente semantico para pasar de texto sucio a datos limpios sin añadir miles de abrebiaturas manuales.
+ 
+ Deteccion automatica de formato
+ 
+ - Tabular (tabs o espacios dobles): parser directo deterministico. Si hay ejercicios desconosidos, se activa el enriquecimiento con IA de forma autonoma.
+ - Texto libre: el modelo GLiNER extrae entidades como ejercicio, series, repeticiones, peso en kg y descanso.
+ 
+ Expansion de abreviaturas (ABREVIATURAS)
+ 
+ Diccionario que normaliza formas coloquiales de gym antes de la IA:
+ 
+ "Kckton"    →  "Patada Triceps"
+ "Sent bulg" →  "Sentadilla Bulgara"
+ "Curl bien" →  "Curl Predicador"
+ "pm rum"    →  "Peso Muerto Rumano"
+ 
+ Metadatos extraidos
+ 
+ Si el texto contiene una cabecera de planificacion, se estraen automaticamente:
+ 
+ | Campo | Ejemplo |
+ |---|---|
+ | mesociclo | "9" |
+ | semana | "55" |
+ | sesion | "71" o "P1" |
+ 
+ Salida del parser tabular
+ 
+ ```python
+ [
+   {
+     "ejercicio":      "Press Plano",
+     "rango_objetivo": "7-12",
+     "series":         [{"reps": 10, "peso_kg": 100.0}, ...],
+     "origen":         "tabla",
+     "mesociclo":      "9",
+     "semana":         "55",
+     "sesion":         "71"
+   },
+   ...
+ ]
+ ```
 
 Salida de GLiNER (texto libre)
 
