@@ -50,6 +50,10 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         
         self.lbl_status_file = ctk.CTkLabel(self.frame_controles, text="Ningún archivo seleccionado", text_color="gray")
         self.lbl_status_file.grid(row=2, column=1, padx=20, pady=(0, 15), sticky="w")
+        
+        self.btn_help = ctk.CTkButton(self.frame_controles, text="?", width=30, height=30, corner_radius=15,
+                                      fg_color="gray", hover_color="gray50", command=self.mostrar_ayuda)
+        self.btn_help.grid(row=0, column=2, padx=20, pady=15, sticky="e")
 
         # --- SECCIÓN 2: ACCIÓN DE PROCESADO ---
         self.btn_procesar = ctk.CTkButton(self, text="⚡ PROCESAR CON IA", font=ctk.CTkFont(size=18, weight="bold"),
@@ -81,6 +85,15 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.btn_guardar = ctk.CTkButton(self.frame_acciones, text="💾 Guardar en BBDD", state="disabled",
                                          command=self.confirmar_guardado)
         self.btn_guardar.pack(side="left", padx=10)
+
+    def mostrar_ayuda(self):
+        from tkinter import messagebox
+        msg = ("Carga de Rutinas:\n\n"
+               "- Selecciona un atleta y una imagen de su rutina.\n"
+               "- Pulsa 'Procesar con IA' para extraer los ejercicios automáticamente.\n"
+               "- Revisa y edita el texto detectado si es necesario.\n"
+               "- Exporta a Excel o guárdalo en la base de datos.")
+        messagebox.showinfo("Ayuda: Carga de Rutinas", msg)
 
     def cargar_atletas(self):
         try:
@@ -173,7 +186,7 @@ class CargaRutinas(ctk.CTkScrollableFrame):
             previa += f"{i}. {nombre} | {series} x {reps} | {peso}kg\n"
             
         self.after(0, lambda: self.txt_preview.insert("0.0", previa))
-        self.after(0, lambda: self.txt_preview.configure(state="disabled"))
+        # No deshabilitamos para que el texto sea editable por el usuario
         
         # Habilitar botones de acción
         self.after(0, lambda: self.btn_procesar.configure(state="normal", text="⚡ PROCESAR CON IA"))

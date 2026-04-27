@@ -26,6 +26,10 @@ class ListadoAtletas(ctk.CTkFrame):
         self.btn_toggle_inactivos = ctk.CTkButton(self.frame_botones, text="Ver Inactivos", fg_color="gray", hover_color="gray50", command=self.toggle_inactivos)
         self.btn_toggle_inactivos.pack(side="left", padx=10)
         
+        self.btn_help = ctk.CTkButton(self.frame_botones, text="?", width=30, height=30, corner_radius=15,
+                                      fg_color="gray", hover_color="gray50", command=self.mostrar_ayuda)
+        self.btn_help.pack(side="right", padx=10)
+        
         # Frame Listado (Scrollable)
         self.frame_lista = ctk.CTkScrollableFrame(self)
         self.frame_lista.pack(fill="both", expand=True, padx=20, pady=10)
@@ -33,6 +37,15 @@ class ListadoAtletas(ctk.CTkFrame):
         # Render inicial
         self.imagenes_cargadas = {}
         self.renderizar_lista()
+
+    def mostrar_ayuda(self):
+        from tkinter import messagebox
+        msg = ("Gestión de Atletas:\n\n"
+               "- Registrar Atleta: Añade un nuevo cliente al sistema.\n"
+               "- Actualizar/Borrar: Modifica o elimina datos de atletas existentes.\n"
+               "- Ver Inactivos: Alterna entre clientes activos y los que ya no están en el programa.\n"
+               "- Ver Ficha: Haz clic sobre cualquier tarjeta de atleta para abrir su perfil detallado.")
+        messagebox.showinfo("Ayuda: Listado de Atletas", msg)
 
     def obtener_atletas_activos(self):
         with SessionLocal() as session:

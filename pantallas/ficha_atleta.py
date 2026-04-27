@@ -18,6 +18,10 @@ class FichaAtleta(ctk.CTkFrame):
         self.btn_volver = ctk.CTkButton(self.frame_cabecera, text="← Volver a Atletas", width=140, fg_color="gray", hover_color="gray50", command=self.volver_al_listado)
         self.btn_volver.pack(side="left")
         
+        self.btn_help = ctk.CTkButton(self.frame_cabecera, text="?", width=30, height=30, corner_radius=15,
+                                      fg_color="gray", hover_color="gray50", command=self.mostrar_ayuda)
+        self.btn_help.pack(side="right")
+        
         # Frame Perfil
         self.frame_perfil = ctk.CTkFrame(self)
         self.frame_perfil.pack(fill="x", padx=20, pady=20)
@@ -34,6 +38,14 @@ class FichaAtleta(ctk.CTkFrame):
         
         self.lbl_info = ctk.CTkLabel(self.frame_contenido, text="Estructura base de la ficha.\nEl resto del diseño será integrado posteriormente.", font=ctk.CTkFont(size=14, slant="italic"))
         self.lbl_info.pack(expand=True, pady=40)
+
+    def mostrar_ayuda(self):
+        from tkinter import messagebox
+        msg = ("Ficha del Atleta:\n\n"
+               "- Información General: Consulta los datos básicos y la foto del cliente.\n"
+               "- Próximamente: Historial de rutinas, formularios de progreso y gestión de pagos detallada.\n"
+               "- Volver: Regresa al listado completo de atletas.")
+        messagebox.showinfo("Ayuda: Ficha de Atleta", msg)
 
     def crear_avatar_por_defecto(self, nombre):
         img = Image.new('RGB', (100, 100), color=(100, 100, 150))

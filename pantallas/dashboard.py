@@ -109,6 +109,10 @@ class Dashboard(ctk.CTkScrollableFrame):
         self.frame_atletas = ctk.CTkFrame(self, corner_radius=15)
         self.frame_atletas.pack(fill="x", padx=20, pady=(20, 10))
         
+        self.btn_help = ctk.CTkButton(self.frame_atletas, text="?", width=30, height=30, corner_radius=15,
+                                      fg_color="gray", hover_color="gray50", command=self.mostrar_ayuda)
+        self.btn_help.place(relx=0.97, rely=0.1, anchor="ne")
+        
         self.lbl_titulo_atletas = ctk.CTkLabel(self.frame_atletas, text="Atletas Activos", font=ctk.CTkFont(size=24, weight="bold"))
         self.lbl_titulo_atletas.pack(pady=(20, 5))
         
@@ -166,6 +170,18 @@ class Dashboard(ctk.CTkScrollableFrame):
             
         self.dias_botones = []
         self.actualizar_calendario()
+
+    def mostrar_ayuda(self):
+        from tkinter import messagebox
+        msg = ("Bienvenido al Dashboard.\n\n"
+               "- Atletas Activos: Muestra el total de clientes vigentes.\n"
+               "- Formularios Pendientes: Te avisa cuántos atletas deben rellenar su reporte.\n"
+               "- Calendario: Gestiona tus llamadas y ve fechas de pago.\n"
+               "  - Azul: Llamadas programadas.\n"
+               "  - Verde: Renovaciones/Pagos.\n"
+               "  - Naranja: Ambos eventos el mismo día.\n"
+               "Haz clic en un día para añadir o editar llamadas.")
+        messagebox.showinfo("Ayuda: Dashboard", msg)
 
     def actualizar_dashboard(self):
         with SessionLocal() as session:
