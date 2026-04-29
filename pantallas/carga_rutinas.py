@@ -2,6 +2,7 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import os
 import threading
+from datetime import datetime
 from bbdd.database import SessionLocal
 from logica.atletas_service import AtletasService
 from logica.rutinas_service import RutinasService

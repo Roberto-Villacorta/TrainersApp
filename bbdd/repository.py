@@ -25,7 +25,7 @@ class DashboardRepository:
         # Subconsulta para obtener los atletas que SÍ tienen formulario desde el último domingo
         atletas_con_formulario = self.session.query(FormularioSemanal.atleta_id).filter(
             FormularioSemanal.fecha_registro >= ultimo_domingo
-        ).subquery()
+        ).scalar_subquery()
         
         # Contar atletas activos que NO están en la subconsulta
         pendientes = self.session.query(Atleta).filter(

@@ -1,28 +1,38 @@
 import os
-from gliner import GLiNER
-from logica.ia_service import MODEL_NAME, MODEL_DIR
 from utils.logger import app_logger
 
 class IAFormService:
     """
     Servicio para interpretar las respuestas de texto libre de un formulario 
     utilizando el modelo local GLiNER (Zero-shot NER).
+    Reutiliza el singleton de GlinerService para evitar recargar el modelo en cada uso.
     """
+    _model = None  # Singleton compartido
+
     def __init__(self):
-        os.environ["HF_HOME"] = MODEL_DIR
-        try:
-            self.model = GLiNER.from_pretrained(MODEL_NAME, load_onnx_model=False)
-            app_logger.info("Modelo GLiNER cargado correctamente para análisis de formularios.")
-        except Exception as e:
-            app_logger.error(f"Error cargando GLiNER en IAFormService: {e}")
-            self.model = None
+        if IAFormService._model is None:
+            try:
+                from logica.ia_service import GlinerService
+                from logica.ia_service import MODEL_NAME, MODEL_DIR
+                os.environ["HF_HOME"] = MODEL_DIR
+                # Reutilizamos el singleton de GlinerService si ya está cargado,
+                # o lo creamos con carga diferida (lazy) para no bloquear el arranque
+                svc = GlinerService(cargar_modelo_al_inicio=False)
+                # Forzamos la carga ahora que estamos en el contexto del formulario
+                if GlinerService._modelo is None:
+                    GlinerService(cargar_modelo_al_inicio=True)
+                IAFormService._model = GlinerService._modelo
+                app_logger.info("Modelo GLiNER vinculado correctamente para análisis de formularios.")
+            except Exception as e:
+                app_logger.error(f"Error cargando GLiNER en IAFormService: {e}")
+                IAFormService._model = None
 
     def analizar_formulario(self, respuestas: dict) -> dict:
         """
         Analiza las respuestas de texto libre del formulario para extraer entidades 
         y generar métricas de alerta heurísticas.
         """
-        if not self.model:
+        if not IAFormService._model:
             return self._generar_vacio()
 
         # Concatenar respuestas relevantes de texto libre
@@ -39,10 +49,8 @@ class IAFormService:
             return self._generar_vacio()
 
         labels = ["dolor", "lesión", "cansancio", "fatiga", "estrés", "agobio", "sueño", "mejora", "hambre", "ansiedad"]
-        entities = self.model.predict_entities(texto_completo, labels, threshold=0.3)
+        entities = IAFormService._model.predict_entities(texto_completo, labels, threshold=0.3)
         
-        # Mapear entidades encontradas a valores de alerta (1 a 5)
-        # Valores por defecto: 1 (Muy bien / Nada de alerta)
         alertas = {
             "alerta_fatiga": 1,
             "alerta_dolor": 1,
@@ -65,9 +73,6 @@ class IAFormService:
                 alertas["alerta_estres"] = min(5, alertas["alerta_estres"] + 2)
             elif label in ["sueño"]:
                 alertas["alerta_sueno"] = min(5, alertas["alerta_sueno"] + 2)
-            elif label in ["mejora"]:
-                # Si hay mejora, el rendimiento suele estar bien
-                pass 
                 
         # Si se detectaron cosas negativas, subimos el riesgo de rendimiento
         if alertas["alerta_fatiga"] > 2 or alertas["alerta_dolor"] > 2:

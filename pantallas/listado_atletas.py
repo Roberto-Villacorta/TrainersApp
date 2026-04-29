@@ -105,11 +105,6 @@ class ListadoAtletas(ctk.CTkFrame):
             card = ctk.CTkFrame(self.frame_lista, cursor="hand2")
             card.pack(fill="x", pady=5, padx=5)
             
-            # Hacer que hacer click en la tarjeta o sus hijos abra la ficha
-            # Hay que vincular a los hijos también
-            for event_target in [card]: # lo asociaremos a target y a cada hijo abajo
-                pass
-                
             # Avatar
             img = None
             if atleta.foto_perfil:

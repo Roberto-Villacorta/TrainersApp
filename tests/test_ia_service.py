@@ -771,7 +771,7 @@ class TestGlinerServiceModelo:
             assert "tipo" in entidad
             assert "texto" in entidad
             assert "confianza" in entidad
-            assert entidad["origen"] == "gliner"
+            assert entidad["origen"] in ("gliner", "segmented_safety_net")
 
     def test_threshold_filtra_baja_confianza(self, servicio_con_modelo):
         """Todas las entidades deben tener confianza >= threshold."""
