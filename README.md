@@ -20,8 +20,8 @@ TrainersApp reduce el trabajo manual de los entrenadores centralizando:
 
 Seguimiento de atletas: fichas individuales con historial de formularios semanales.
 Procesado automatico de rutinas: el entrenador fotografía el cuaderno de entrenamiento y OCR e IA generan datos estructurados listos para comparar y exportar.
-Comparativas de progreso: graficas y tablas que muestran la evolucion semana a semana, destacando la mejor y peor semana.
-Calendario de llamadas: recordatorios integrados en el Dashboard.
+Comparativas de progreso y Analisis IA: graficas generadas con Matplotlib que comparan la evolucion semana a semana y resumenes automáticos de texto extraídos por GLiNER a partir de las dudas y comentarios del atleta.
+Calendario de llamadas y Formularios Pendientes: recordatorios integrados en el Dashboard que cruzan datos entre suscripciones, llamadas y registro del último domingo.
 
 Estructura del proyecto
 
@@ -58,9 +58,9 @@ Funcionalidades principales
 
 Paginas de la aplicacion
 
-Pagina: Dashboard | Descripcion: Numero de atletas activos, formularios pendientes y calendario de llamadas
+Pagina: Dashboard | Descripcion: Numero de atletas activos, formularios pendientes calculados desde el último domingo y calendario interactivo de llamadas/pagos
 Pagina: Listado de atletas | Descripcion: Vista completa de la cartera, busqueda y alta de nuevos atletas
-Pagina: Ficha individual | Descripcion: Historial de formularios, carga de rutinas y progreso semanal del atleta
+Pagina: Ficha individual | Descripcion: Formulario de 10 preguntas semanales, historial comparativo visual con graficos Matplotlib y extraccion de alertas automaticas por IA.
 Pagina: Carga de archivos | Descripcion: El entrenador sube fotos del cuaderno; el sistema procesa automaticamente
 
 Flujo de procesado de rutinas
@@ -79,6 +79,7 @@ Capa: Interfaz grafica | Tecnologia: customtkinter >= 5.2.0
 Capa: Base de datos | Tecnologia: SQLAlchemy >= 2.0.0 + SQLite
 Capa: OCR | Tecnologia: pytesseract >= 0.3.10 + Pillow >= 10.0.0
 Capa: IA / NER | Tecnologia: gliner >= 0.2.3 (modelo urchade/gliner_multi-v2.1)
+Capa: Graficos | Tecnologia: matplotlib >= 3.7.0
 Capa: Exportacion | Tecnologia: pandas >= 2.0.0 + openpyxl >= 3.1.2
 Capa: PDF | Tecnologia: pdf2image >= 1.16.3
 Capa: Tests | Tecnologia: pytest >= 9.0
