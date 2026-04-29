@@ -204,4 +204,8 @@ if __name__ == "__main__":
     ctk.set_default_color_theme("blue")
 
     app = MainApp()
-    app.mainloop()
+    try:
+        app.mainloop()
+    except KeyboardInterrupt:
+        # Ctrl+C en terminal: cierre limpio sin traceback
+        pass

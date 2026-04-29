@@ -170,10 +170,12 @@ class Dashboard(ctk.CTkScrollableFrame):
             self.frame_grid_calendario.grid_columnconfigure(i, weight=1)
             
         self.dias_botones = []
-        # Caché del último mes renderizado para evitar reconstruir el calendario si no cambió
+        # Caché del último mes renderizado
         self._cache_cal: tuple | None = None  # (year, month)
         self._cache_llamadas: dict = {}
         self._cache_suscripciones: dict = {}
+        # Contador de generación: evita que hilos obsoletos sobreescriban el calendario
+        self._cal_gen: int = 0
         self.actualizar_calendario()
 
     def mostrar_ayuda(self):
@@ -203,15 +205,18 @@ class Dashboard(ctk.CTkScrollableFrame):
         self.after(0, lambda: self.lbl_num_forms.configure(text=str(metricas["formularios_pendientes"])))
 
     def actualizar_calendario(self):
-        """Reconstruye el grid del calendario. Si el mes no cambió, lanza la carga de datos en hilo
-        de fondo para actualizar llamadas/suscripciones sin reconstruir todos los botones."""
+        """Reconstruye el grid del calendario lanzando la carga de datos en hilo de fondo.
+        Usa un contador de generación para descartar respuestas de hilos obsoletos cuando
+        el usuario cambia de mes varias veces seguidas muy rápido."""
+        # Capturar scroll ANTES de cualquier destrucción de widgets para no perderlo
+        scroll_y = self._parent_canvas.yview()[0] if hasattr(self, "_parent_canvas") else 0.0
+
         meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
         self.lbl_mes_anio.configure(text=f"{meses[self.current_month-1]} {self.current_year}")
 
         clave_mes = (self.current_year, self.current_month)
         if self._cache_cal != clave_mes:
-            # Mes distinto: destruir botones anteriores y reconstruir
             for btn in self.dias_botones:
                 btn.destroy()
             self.dias_botones.clear()
@@ -219,23 +224,35 @@ class Dashboard(ctk.CTkScrollableFrame):
             self._cache_llamadas = {}
             self._cache_suscripciones = {}
 
-        # Cargar datos de BD en hilo de fondo y repintar botones al terminar
-        threading.Thread(target=self._cargar_datos_calendario, daemon=True).start()
+        self._cal_gen += 1
+        gen_actual = self._cal_gen
 
-    def _cargar_datos_calendario(self):
-        """Consulta llamadas y suscripciones del mes en segundo plano."""
+        threading.Thread(
+            target=self._cargar_datos_calendario,
+            args=(gen_actual, scroll_y),
+            daemon=True,
+        ).start()
+
+    def _cargar_datos_calendario(self, gen: int, scroll_y: float):
+        """Consulta llamadas y suscripciones del mes en segundo plano.
+        Descarta el resultado si ya hay una generación más reciente en curso."""
+        # Capturar el mes al que corresponde este hilo para la consulta
+        anio, mes = self.current_year, self.current_month
         llamadas_mes: dict = {}
         suscripciones_mes: dict = {}
         with SessionLocal() as session:
             ds = DashboardService(session)
-            for ll in ds.obtener_llamadas_mes(self.current_year, self.current_month):
+            for ll in ds.obtener_llamadas_mes(anio, mes):
                 llamadas_mes.setdefault(ll.fecha.day, []).append({"id": ll.id, "nombre": ll.nombre})
-            for s in ds.obtener_suscripciones_mes(self.current_year, self.current_month):
+            for s in ds.obtener_suscripciones_mes(anio, mes):
                 suscripciones_mes.setdefault(s.fecha_renovacion.day, []).append(s.atleta.nombre_completo)
-        self.after(0, lambda: self._construir_botones_calendario(llamadas_mes, suscripciones_mes))
+        # Solo aplicar si seguimos siendo la generación más reciente
+        if gen == self._cal_gen:
+            self.after(0, lambda: self._construir_botones_calendario(llamadas_mes, suscripciones_mes, scroll_y))
 
-    def _construir_botones_calendario(self, llamadas_mes: dict, suscripciones_mes: dict):
-        """Reconstruye los botones del grid en el hilo principal con los datos recibidos."""
+    def _construir_botones_calendario(self, llamadas_mes: dict, suscripciones_mes: dict, scroll_y: float = 0.0):
+        """Reconstruye los botones del grid en el hilo principal con los datos recibidos.
+        Restaura la posición de scroll capturada antes de lanzar el hilo."""
         self._cache_llamadas = llamadas_mes
         self._cache_suscripciones = suscripciones_mes
 
@@ -245,7 +262,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         self.dias_botones.clear()
 
         cal = calendar.monthcalendar(self.current_year, self.current_month)
-        
+
         for row, semana in enumerate(cal):
             for col, dia in enumerate(semana):
                 if dia != 0:
@@ -278,6 +295,16 @@ class Dashboard(ctk.CTkScrollableFrame):
                     )
                     btn_dia.grid(row=row + 1, column=col, padx=2, pady=2, sticky="nsew")
                     self.dias_botones.append(btn_dia)
+
+        # Restaurar posición de scroll.
+        # update_idletasks() fuerza a Tkinter a procesar todos los eventos de geometría
+        # pendientes (<Configure> del canvas) antes de mover el yview, evitando que el
+        # sistema de layout lo resetee justo después.
+        if scroll_y > 0.0 and hasattr(self, "_parent_canvas"):
+            def _restaurar_scroll():
+                self.update_idletasks()
+                self._parent_canvas.yview_moveto(scroll_y)
+            self.after(30, _restaurar_scroll)
 
     def mes_anterior(self):
         if self.current_month == 1:
