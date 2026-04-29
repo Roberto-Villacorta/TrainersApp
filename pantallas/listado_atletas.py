@@ -1,6 +1,8 @@
 import customtkinter as ctk
 import io
-from PIL import Image, ImageDraw, ImageFont
+import hashlib
+import threading
+from PIL import Image, ImageDraw
 from bbdd.database import SessionLocal
 from logica.atletas_service import AtletasService
 from utils.dialogos_atletas import DialogoRegistrarAtleta, DialogoActualizarAtleta, DialogoBorrarAtleta
@@ -33,9 +35,10 @@ class ListadoAtletas(ctk.CTkFrame):
         # Frame Listado (Scrollable)
         self.frame_lista = ctk.CTkScrollableFrame(self)
         self.frame_lista.pack(fill="both", expand=True, padx=20, pady=10)
-        
-        # Render inicial
-        self.imagenes_cargadas = {}
+
+        # Caché de imágenes: clave = (atleta_id, md5_foto) para no reprocesar fotos que no cambiaron.
+        # Para avatares por defecto la clave es (atleta_id, None).
+        self._cache_imagenes: dict = {}
         self.renderizar_lista()
 
     def mostrar_ayuda(self):
@@ -77,78 +80,96 @@ class ListadoAtletas(ctk.CTkFrame):
         atletas = self.obtener_atletas_activos()
         DialogoBorrarAtleta(self, atletas, al_completar_callback=self.renderizar_lista)
 
-    def crear_avatar_por_defecto(self, nombre):
-        img = Image.new('RGB', (80, 80), color=(100, 100, 150))
+    def crear_avatar_por_defecto(self, nombre: str) -> Image.Image:
+        """Genera un avatar con la inicial del nombre sobre fondo azul oscuro."""
+        img = Image.new('RGB', (60, 60), color=(60, 80, 140))
         d = ImageDraw.Draw(img)
         letra = nombre[0].upper() if nombre else "?"
-        # Como no tenemos una fuente cargada fácilmente accesible en todos los sistemas, usamos la default y ajustamos:
-        # Nota: Idealmente se usaría ImageFont.truetype()
-        d.text((30, 25), letra, fill=(255, 255, 255))
+        d.text((20, 15), letra, fill=(255, 255, 255))
         return img
 
+    def _obtener_ctk_image(self, atleta_id: int, foto_bytes: bytes | None, nombre: str) -> ctk.CTkImage:
+        """Devuelve la CTkImage del atleta, usando caché para no reprocesar si la foto no cambió."""
+        clave_hash = hashlib.md5(foto_bytes).hexdigest() if foto_bytes else None
+        clave = (atleta_id, clave_hash)
+        if clave not in self._cache_imagenes:
+            if foto_bytes:
+                try:
+                    img = Image.open(io.BytesIO(foto_bytes)).resize((60, 60), Image.LANCZOS)
+                except Exception:
+                    img = self.crear_avatar_por_defecto(nombre)
+            else:
+                img = self.crear_avatar_por_defecto(nombre)
+            self._cache_imagenes[clave] = ctk.CTkImage(light_image=img, dark_image=img, size=(60, 60))
+        return self._cache_imagenes[clave]
+
     def renderizar_lista(self):
-        # Limpiar
+        """Consulta la BBDD en hilo secundario y construye las tarjetas en el hilo principal."""
+        # Limpiar inmediatamente para dar feedback visual
         for widget in self.frame_lista.winfo_children():
             widget.destroy()
-        
+        threading.Thread(target=self._cargar_atletas_en_hilo, daemon=True).start()
+
+    def _cargar_atletas_en_hilo(self):
+        """Ejecuta la consulta SQL en segundo plano y devuelve los datos al hilo principal."""
         with SessionLocal() as session:
             service = AtletasService(session)
             estado_req = "inactivo" if self.viendo_inactivos else "activo"
             atletas = service.obtener_atletas(estado=estado_req)
-            
-        if not atletas:
-            msg = "No hay atletas inactivos." if self.viendo_inactivos else "No hay atletas activos. ¡Registra tú primer cliente!"
+            # Extraemos solo los datos necesarios dentro de la sesión para no arrastrar objetos SQLAlchemy
+            datos = [
+                {
+                    "id": a.id,
+                    "nombre": a.nombre_completo,
+                    "fecha_comienzo": a.fecha_comienzo,
+                    "foto_perfil": a.foto_perfil,
+                }
+                for a in atletas
+            ]
+        self.after(0, lambda: self._construir_tarjetas(datos))
+
+    def _construir_tarjetas(self, datos: list):
+        """Construye las tarjetas en el hilo principal usando los datos recibidos del hilo secundario."""
+        # Limpiar por si algo se añadió mientras esperábamos el hilo
+        for widget in self.frame_lista.winfo_children():
+            widget.destroy()
+
+        if not datos:
+            msg = "No hay atletas inactivos." if self.viendo_inactivos else "No hay atletas activos. ¡Registra tu primer cliente!"
             ctk.CTkLabel(self.frame_lista, text=msg, font=ctk.CTkFont(size=16)).pack(pady=40)
             return
-            
-        for atleta in atletas:
+
+        for atleta in datos:
             card = ctk.CTkFrame(self.frame_lista, cursor="hand2")
             card.pack(fill="x", pady=5, padx=5)
-            
-            # Avatar
-            img = None
-            if atleta.foto_perfil:
-                try:
-                    img = Image.open(io.BytesIO(atleta.foto_perfil))
-                    img = img.resize((60, 60))
-                except:
-                    img = self.crear_avatar_por_defecto(atleta.nombre_completo)
-            else:
-                img = self.crear_avatar_por_defecto(atleta.nombre_completo)
-                
-            ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(60, 60))
-            # Guardamos referencia para evitar GC
-            self.imagenes_cargadas[atleta.id] = ctk_img
-            
+
+            ctk_img = self._obtener_ctk_image(atleta["id"], atleta["foto_perfil"], atleta["nombre"])
+
             lbl_img = ctk.CTkLabel(card, image=ctk_img, text="")
             lbl_img.pack(side="left", padx=15, pady=10)
-            
-            # Datos
+
             frame_nombres = ctk.CTkFrame(card, fg_color="transparent")
             frame_nombres.pack(side="left", fill="both", expand=True, padx=10, pady=10)
-            
-            lbl_nombre = ctk.CTkLabel(frame_nombres, text=atleta.nombre_completo, font=ctk.CTkFont(size=18, weight="bold"))
+
+            lbl_nombre = ctk.CTkLabel(frame_nombres, text=atleta["nombre"], font=ctk.CTkFont(size=18, weight="bold"))
             lbl_nombre.pack(anchor="w")
-            
-            str_fecha = atleta.fecha_comienzo.strftime('%d/%m/%Y') if atleta.fecha_comienzo else "Sin asignar"
+
+            str_fecha = atleta["fecha_comienzo"].strftime('%d/%m/%Y') if atleta["fecha_comienzo"] else "Sin asignar"
             lbl_fecha = ctk.CTkLabel(frame_nombres, text=f"Comienzo del proceso: {str_fecha}", text_color="gray")
             lbl_fecha.pack(anchor="w")
-            
-            # Switch de reactivacion cuando es inactivo
+
             if self.viendo_inactivos:
                 var_switch = ctk.IntVar(value=0)
-                switch = ctk.CTkSwitch(card, text="Reactivar", variable=var_switch, 
-                                       command=lambda id_atl=atleta.id: self.alternar_estado_atleta(id_atl, "activo"))
+                switch = ctk.CTkSwitch(
+                    card, text="Reactivar", variable=var_switch,
+                    command=lambda id_atl=atleta["id"]: self.alternar_estado_atleta(id_atl, "activo")
+                )
                 switch.pack(side="right", padx=20)
-            
-            # Bind de clic
-            def abrir_ficha(evento, id_atleta=atleta.id):
+
+            def abrir_ficha(evento, id_atleta=atleta["id"]):
                 app = self.winfo_toplevel()
                 if hasattr(app, "mostrar_ficha_atleta"):
                     app.mostrar_ficha_atleta(id_atleta)
-                    
-            card.bind("<Button-1>", abrir_ficha)
-            lbl_img.bind("<Button-1>", abrir_ficha)
-            frame_nombres.bind("<Button-1>", abrir_ficha)
-            lbl_nombre.bind("<Button-1>", abrir_ficha)
-            lbl_fecha.bind("<Button-1>", abrir_ficha)
+
+            for widget in (card, lbl_img, frame_nombres, lbl_nombre, lbl_fecha):
+                widget.bind("<Button-1>", abrir_ficha)
