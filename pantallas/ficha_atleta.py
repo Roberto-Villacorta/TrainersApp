@@ -199,7 +199,7 @@ class DialogoFormulario(ctk.CTkToplevel):
         except Exception as e:
             messagebox.showerror("Error", f"Error guardando formulario: {e}")
 
-class FichaAtleta(ctk.CTkFrame):
+class FichaAtleta(ctk.CTkScrollableFrame):
     def __init__(self, master, master_app, **kwargs):
         super().__init__(master, **kwargs)
         self.master_app = master_app
@@ -234,7 +234,7 @@ class FichaAtleta(ctk.CTkFrame):
         self.btn_formulario.pack(side="right", padx=20, pady=20)
         
         # Frame Contenido Adicional (Gráficos y Resumen)
-        self.frame_contenido = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.frame_contenido = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_contenido.pack(fill="both", expand=True, padx=20, pady=10)
 
     def mostrar_ayuda(self):

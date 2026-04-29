@@ -63,6 +63,14 @@ class MainApp(ctk.CTk):
         self.bind_all("<Button-5>", self._on_mousewheel)
         self.bind_all("<MouseWheel>", self._on_mousewheel)
         
+        # Protocolo para asegurar el cierre completo de la app
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
+    def on_closing(self):
+        self.quit()
+        self.destroy()
+        sys.exit(0)
+        
     def _on_mousewheel(self, event):
         # Forzar el evento de scroll directamente sobre el canvas interno de CustomTkinter
         # para que funcione sin importar si el ratón está encima de una tarjeta o etiqueta
