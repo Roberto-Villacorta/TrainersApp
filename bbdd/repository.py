@@ -14,9 +14,26 @@ class DashboardRepository:
     def count_formularios_pendientes(self) -> int:
         """
         Cuenta los formularios pendientes.
-        Por ahora, cuenta todos los formularios registrados en la base de datos.
+        Los atletas activos que no tengan guardado un formulario con la última fecha del último domingo 
+        (o posterior) suman 1 a los formularios pendientes.
         """
-        return self.session.query(FormularioSemanal).count()
+        hoy = datetime.date.today()
+        # weekday(): 0 es Lunes, 6 es Domingo.
+        dias_desde_domingo = hoy.weekday() + 1 if hoy.weekday() != 6 else 0
+        ultimo_domingo = hoy - datetime.timedelta(days=dias_desde_domingo)
+        
+        # Subconsulta para obtener los atletas que SÍ tienen formulario desde el último domingo
+        atletas_con_formulario = self.session.query(FormularioSemanal.atleta_id).filter(
+            FormularioSemanal.fecha_registro >= ultimo_domingo
+        ).subquery()
+        
+        # Contar atletas activos que NO están en la subconsulta
+        pendientes = self.session.query(Atleta).filter(
+            Atleta.estado == "activo",
+            ~Atleta.id.in_(atletas_con_formulario)
+        ).count()
+        
+        return pendientes
 
     def guardar_llamada(self, nombre: str, fecha: datetime.date) -> Llamada:
         nueva_llamada = Llamada(nombre=nombre, fecha=fecha)

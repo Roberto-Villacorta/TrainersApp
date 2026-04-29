@@ -88,6 +88,9 @@ class FormularioSemanal(Base):
     alerta_estres = Column(Integer)
     alerta_rendimiento = Column(Integer)
 
+    # 10. Dudas
+    dudas = Column(Text)
+
     atleta = relationship("Atleta", back_populates="formularios")
 
 class Rutina(Base):
