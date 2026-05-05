@@ -45,12 +45,12 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.lbl_file = ctk.CTkLabel(self.frame_controles, text="2. Carga las Imágenes (JPG/PNG):", font=ctk.CTkFont(weight="bold"))
         self.lbl_file.grid(row=0, column=1, padx=20, pady=(15, 5), sticky="w")
         
-        self.btn_select_file = ctk.CTkButton(self.frame_controles, text="📁 Seleccionar Imágenes", 
+        self.btn_select_file = ctk.CTkButton(self.frame_controles, text="Seleccionar Imagenes", 
                                              command=self.seleccionar_archivos,
                                              fg_color="#1f6aa5", hover_color="#144870")
         self.btn_select_file.grid(row=1, column=1, padx=20, pady=(0, 15), sticky="w")
         
-        self.lbl_status_file = ctk.CTkLabel(self.frame_controles, text="Ningún archivo seleccionado", text_color="gray")
+        self.lbl_status_file = ctk.CTkLabel(self.frame_controles, text="Ningun archivo seleccionado", text_color="gray")
         self.lbl_status_file.grid(row=2, column=1, padx=20, pady=(0, 15), sticky="w")
         
         self.btn_help = ctk.CTkButton(self.frame_controles, text="?", width=30, height=30, corner_radius=15,
@@ -58,7 +58,7 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.btn_help.grid(row=0, column=2, padx=20, pady=15, sticky="e")
 
         # --- SECCIÓN 2: ACCIÓN DE PROCESADO ---
-        self.btn_procesar = ctk.CTkButton(self, text="⚡ PROCESAR CON IA", font=ctk.CTkFont(size=18, weight="bold"),
+        self.btn_procesar = ctk.CTkButton(self, text="PROCESAR CON IA", font=ctk.CTkFont(size=18, weight="bold"),
                                           height=50, command=self.iniciar_procesamiento,
                                           state="disabled", fg_color="#2e8c4a", hover_color="#1b5e20")
         self.btn_procesar.grid(row=3, column=0, padx=30, pady=20, sticky="ew")
@@ -73,18 +73,18 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         
         self.txt_preview = ctk.CTkTextbox(self.frame_resultados, height=350, font=ctk.CTkFont(family="Consolas", size=13))
         self.txt_preview.pack(fill="both", expand=True, padx=20, pady=10)
-        self.txt_preview.insert("0.0", "Los resultados aparecerán aquí tras el procesamiento...")
+        self.txt_preview.insert("0.0", "Los resultados apareceran aqui tras el procesamiento...")
         self.txt_preview.configure(state="disabled")
 
         # --- SECCIÓN 4: GUARDAR Y EXPORTAR ---
         self.frame_acciones = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_acciones.grid(row=5, column=0, padx=30, pady=20, sticky="e")
         
-        self.btn_exportar = ctk.CTkButton(self.frame_acciones, text="📊 Exportar a Excel", state="disabled", 
+        self.btn_exportar = ctk.CTkButton(self.frame_acciones, text="Exportar a Excel", state="disabled", 
                                           command=self.exportar_excel, fg_color="#a06917", hover_color="#8c5607")
         self.btn_exportar.pack(side="left", padx=10)
         
-        self.btn_guardar = ctk.CTkButton(self.frame_acciones, text="💾 Guardar en BBDD", state="disabled",
+        self.btn_guardar = ctk.CTkButton(self.frame_acciones, text="Guardar en Base de Datos", state="disabled",
                                          command=self.confirmar_guardado)
         self.btn_guardar.pack(side="left", padx=10)
 
@@ -92,10 +92,10 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         from tkinter import messagebox
         msg = ("Carga de Rutinas:\n\n"
                "- Selecciona un atleta y una o varias fotos.\n"
-               "- Pulsa 'Procesar con IA'. Se usará Ollama (Local) para analizar cada página.\n"
-               "- Cada foto se evalúa de forma independiente.\n"
-               "- Revisa los resultados y guárdalos en la base de datos.")
-        messagebox.showinfo("Ayuda: Carga de Rutinas", msg)
+               "- Pulsa 'Procesar con IA'.\n"
+               "- Cada foto se evalua de forma independiente.\n"
+               "- Revisa los resultados y guardalos en la base de datos.")
+        messagebox.showinfo("Ayuda", msg)
 
     def cargar_atletas(self):
         try:
@@ -113,8 +113,8 @@ class CargaRutinas(ctk.CTkScrollableFrame):
 
     def seleccionar_archivos(self):
         file_paths = filedialog.askopenfilenames(
-            title="Seleccionar imágenes de rutina",
-            filetypes=[("Imágenes", "*.png *.jpg *.jpeg"), ("Todos los archivos", "*.*")]
+            title="Seleccionar imagenes de rutina",
+            filetypes=[("Imagenes", "*.png *.jpg *.jpeg"), ("Todos los archivos", "*.*")]
         )
         if file_paths:
             self.archivos_seleccionados = list(file_paths)
@@ -125,7 +125,7 @@ class CargaRutinas(ctk.CTkScrollableFrame):
     def iniciar_procesamiento(self):
         atleta_str = self.combo_atletas.get()
         if "No hay atletas" in atleta_str or atleta_str == "Cargando atletas...":
-            messagebox.showwarning("Atención", "Por favor, selecciona un atleta válido.")
+            messagebox.showwarning("Atencion", "Por favor, selecciona un atleta valido.")
             return
             
         atleta_id = int(atleta_str.split(" - ")[0])
@@ -134,7 +134,7 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.btn_procesar.configure(state="disabled", text="Analizando fotos...")
         self.txt_preview.configure(state="normal")
         self.txt_preview.delete("0.0", "end")
-        self.txt_preview.insert("0.0", f"Iniciando el análisis de {len(self.archivos_seleccionados)} fotos...\nEstamos leyendo tu libreta, esto puede tardar un poco.\n")
+        self.txt_preview.insert("0.0", f"Iniciando el analisis de {len(self.archivos_seleccionados)} fotos...\nLeyendo libreta, por favor espere.\n")
         self.txt_preview.configure(state="disabled")
         
         # Lanzar en hilo para no congelar la UI
@@ -166,14 +166,14 @@ class CargaRutinas(ctk.CTkScrollableFrame):
                         app_logger.error(f"Fallo en la foto {path}: {resultado.get('error')}")
                 
                 if not self.resultados_por_imagen:
-                    self.finalizar_con_error("No se han podido detectar ejercicios. Prueba con una foto más clara.")
+                    self.finalizar_con_error("No se han podido detectar ejercicios.")
                     return
                 
                 # Mostrar en la previsualización consolidada
                 self.mostrar_previsualizacion_multiple()
                 
         except Exception as e:
-            self.finalizar_con_error(f"Ha ocurrido un inconveniente: {str(e)}")
+            self.finalizar_con_error(f"Inconveniente detectado: {str(e)}")
 
     def actualizar_status_progreso(self, msg):
         self.after(0, lambda: self.txt_preview.configure(state="normal"))
@@ -182,21 +182,21 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.after(0, lambda: self.txt_preview.configure(state="disabled"))
 
     def finalizar_con_error(self, error):
-        self.after(0, lambda: messagebox.showerror("Atención", error))
-        self.after(0, lambda: self.btn_procesar.configure(state="normal", text="⚡ PROCESAR CON IA"))
+        self.after(0, lambda: messagebox.showerror("Atencion", error))
+        self.after(0, lambda: self.btn_procesar.configure(state="normal", text="PROCESAR CON IA"))
 
     def mostrar_previsualizacion_multiple(self):
         self.after(0, lambda: self.txt_preview.configure(state="normal"))
         self.after(0, lambda: self.txt_preview.delete("0.0", "end"))
         
-        previa = "RESUMEN DE DIGITALIZACIÓN MULTI-PÁGINA\n"
-        previa += "="*40 + "\n\n"
+        previa = "RESUMEN DE DIGITALIZACION\n"
+        previa += "="*30 + "\n\n"
         
         for item in self.resultados_por_imagen:
-            previa += f"📄 ARCHIVO: {item['archivo']}\n"
+            previa += f"ARCHIVO: {item['archivo']}\n"
             if item['prefijo']:
-                previa += f"📍 CABECERA: {item['prefijo']}\n"
-            previa += "-"*30 + "\n"
+                previa += f"CABECERA: {item['prefijo']}\n"
+            previa += "-"*20 + "\n"
             
             for i, ej in enumerate(item['ejercicios'], 1):
                 nombre = ej.get("nombre_ejercicio", "Desconocido")

@@ -42,20 +42,18 @@ class VLMService:
 
                 model_id = "HuggingFaceTB/SmolVLM-Instruct"
                 
-                # Ruta compatible con Windows y Linux
                 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 cache_dir = os.path.join(base_dir, "modelos_vlm")
                 os.makedirs(cache_dir, exist_ok=True)
 
-                # Detección de aceleración por tarjeta gráfica (GPU)
                 if torch.cuda.is_available():
                     device = "cuda"
                     dtype = torch.float16
-                    logger.info("¡Tarjeta gráfica detectada! El procesamiento será muy rápido.")
+                    logger.info("Tarjeta grafica detectada. Procesamiento acelerado activado.")
                 else:
                     device = "cpu"
                     dtype = torch.float32
-                    logger.info("Usando el procesador del ordenador (CPU). Esto puede tardar un poco.")
+                    logger.info("Usando el procesador del ordenador (CPU).")
 
                 kwargs = {
                     "torch_dtype": dtype,
@@ -65,12 +63,11 @@ class VLMService:
                 }
 
                 try:
-                    # Intento de carga rápida sin conexión
                     VLMService._processor = AutoProcessor.from_pretrained(model_id, cache_dir=cache_dir, local_files_only=True)
                     VLMService._model = AutoVLM.from_pretrained(model_id, local_files_only=True, **kwargs)
-                    logger.info("Cerebro digital cargado y listo para trabajar.")
+                    logger.info("Cerebro digital cargado y listo.")
                 except Exception:
-                    logger.info("Configurando el sistema por primera vez... descargando componentes necesarios (solo una vez).")
+                    logger.info("Configurando el sistema por primera vez... descargando componentes (solo una vez).")
                     VLMService._processor = AutoProcessor.from_pretrained(model_id, cache_dir=cache_dir)
                     VLMService._model = AutoVLM.from_pretrained(model_id, **kwargs)
                 
@@ -84,26 +81,25 @@ class VLMService:
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Archivo no encontrado: {image_path}")
 
-        # Prompt mejorado para evitar que la IA invente nombres como "Ex1"
-        prompt = """Analyze this photo of a handwritten gym notebook. Extract EVERY exercise written in the table.
-Return ONLY a JSON object. No conversation, no explanations.
+        prompt = """Read the handwritten gym routine in this image and output the data in JSON format.
 
-IMPORTANT RULES:
-1. Exercise Name: Use the EXACT name written in the notebook (e.g. "Dom", "Remo", "P. inclinado"). DO NOT use "Ex1" or "Exercise".
-2. Multi-row: Extract ALL exercises on the page from top to bottom.
-3. Crossed out cells: If a cell has an 'X' or a line through it, skip that specific set.
-4. Format: Return a list of exercises, each with 'nombre', 'rango_reps' and a list of 'series' (e.g. ["10x50", "8x50"]).
+INSTRUCTIONS:
+1. Identify 'Mesociclo', 'Semana', and 'Sesion' from the top header.
+2. Extract EVERY exercise row from the table. 
+3. For each exercise, capture the exact name written, the rep range (e.g., 2-5, 10-12), and all the sets performed (e.g., 5x30, 11x110).
+4. CRITICAL: If a cell is crossed out with a slash or an X, do NOT include that set.
+5. Do NOT include any intro or outro text. Output ONLY the raw JSON.
 
-Expected JSON format:
+DATA SCHEMA:
 {
-  "mesociclo": "9",
-  "semana": "54",
-  "sesion": "T2",
+  "mesociclo": "string",
+  "semana": "string",
+  "sesion": "string",
   "ejercicios": [
     {
-      "nombre": "NOMBRES REALES AQUÍ",
-      "rango_reps": "RANGO AQUÍ",
-      "series": ["reps x peso", "reps x peso"]
+      "nombre": "string (the actual exercise name from the image)",
+      "rango_reps": "string (the target reps)",
+      "series": ["string (reps x weight)", ...]
     }
   ]
 }"""
@@ -112,13 +108,10 @@ Expected JSON format:
             from PIL import Image
             import torch
 
-            # Aprovechar todos los núcleos del procesador si no hay GPU
             if not torch.cuda.is_available():
                 torch.set_num_threads(os.cpu_count() or 4)
 
-            # Optimizar imagen para lectura rápida
             image = Image.open(image_path).convert("RGB")
-            # Reducimos tamaño para que la IA no se agobie con píxeles innecesarios
             image.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
 
             messages = [
@@ -130,7 +123,6 @@ Expected JSON format:
             
             input_text = VLMService._processor.apply_chat_template(messages, add_generation_prompt=True)
             
-            # Mover datos al dispositivo correcto (GPU o CPU)
             device = "cuda" if torch.cuda.is_available() else "cpu"
             inputs = VLMService._processor(text=input_text, images=[image], return_tensors="pt").to(device)
 
@@ -144,19 +136,21 @@ Expected JSON format:
                     use_cache=True
                 )
 
-            # Traducir los códigos de la IA a texto legible
             output_ids = generated_ids[:, inputs["input_ids"].shape[1]:]
             output_text = VLMService._processor.batch_decode(output_ids, skip_special_tokens=True)[0]
 
-            # Buscar el bloque de datos (JSON) dentro de la respuesta
+            logger.info("Analisis completado. Extrayendo datos...")
+            
             start = output_text.find('{')
             end = output_text.rfind('}')
             if start != -1 and end != -1:
-                return json.loads(output_text[start:end+1])
+                json_str = output_text[start:end+1]
+                return json.loads(json_str)
             
             raise ValueError("La IA no pudo formatear los datos correctamente.")
 
         except Exception as e:
             logger.error(f"Error al analizar la imagen: {e}")
             return {"error": "No se pudo leer la imagen correctamente.", "ejercicios": []}
+
 
