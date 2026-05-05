@@ -41,6 +41,10 @@ class RutinasService:
                 nombre_raw = ej.get("nombre", "Desconocido")
                 nombre_enriquecido = self._normalizar_nombre(nombre_raw)
                 
+                if not nombre_enriquecido:
+                    logger.info(f"Ignorando texto aleatorio/desconocido: {nombre_raw}")
+                    continue
+                
                 rango_reps = ej.get("rango_reps", "")
                 series_list = ej.get("series", [])
                 
@@ -68,6 +72,9 @@ class RutinasService:
                     "tiempo_descanso": ""
                 })
             
+            if not ejercicios_db:
+                return {"success": False, "error": "No se encontraron ejercicios validos en la imagen tras filtrar ruido."}
+
             # 3. Construir un nombre de rutina enriquecido con Mesociclo y Semana
             meso = vlm_data.get("mesociclo", "")
             sem = vlm_data.get("semana", "")
@@ -136,6 +143,7 @@ class RutinasService:
         """
         Intenta expandir abreviaturas y encontrar el nombre canónico del ejercicio.
         Retorna 'Original (Canonico)' si hay coincidencia.
+        Si no hay coincidencia, retorna None (para filtrar strings aleatorios).
         """
         try:
             from logica.ia_service import ExpansorAbreviaturas, ABREVIATURAS, EJERCICIOS_CANONICOS, _normalizar_texto_base
@@ -144,6 +152,9 @@ class RutinasService:
             nombre_clean = nombre_ia.strip()
             nombre_norm = _normalizar_texto_base(nombre_clean)
             
+            if nombre_norm in EJERCICIOS_CANONICOS:
+                return nombre_clean
+                
             expansor = ExpansorAbreviaturas(ABREVIATURAS)
             nombre_exp = expansor.expandir(nombre_clean)
             
@@ -151,13 +162,15 @@ class RutinasService:
             if nombre_exp.lower() != nombre_norm.lower():
                 return f"{nombre_clean} ({nombre_exp.title()})"
             
-            # 2. Si no, búsqueda difusa (Fuzzy Match) en el catálogo canónico completo
-            coincidencias = difflib.get_close_matches(nombre_norm, EJERCICIOS_CANONICOS, n=1, cutoff=0.7)
-            if coincidencias and coincidencias[0].lower() != nombre_norm.lower():
-                return f"{nombre_clean} ({coincidencias[0].title()})"
+            # 2. Si no, búsqueda difusa (Fuzzy Match) en el catálogo canónico completo con mayor tolerancia
+            coincidencias = difflib.get_close_matches(nombre_norm, EJERCICIOS_CANONICOS, n=1, cutoff=0.5)
+            if coincidencias:
+                if coincidencias[0].lower() != nombre_norm.lower():
+                    return f"{nombre_clean} ({coincidencias[0].title()})"
+                return nombre_clean
             
-            return nombre_clean
+            return None
         except Exception as e:
             logger.error(f"Error en normalización de nombre: {e}")
-            return nombre_ia
+            return None
 

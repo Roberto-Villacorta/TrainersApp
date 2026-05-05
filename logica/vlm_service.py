@@ -140,6 +140,7 @@ DATA SCHEMA:
             output_text = VLMService._processor.batch_decode(output_ids, skip_special_tokens=True)[0]
 
             logger.info("Analisis completado. Extrayendo datos...")
+            logger.info(f"Salida cruda del modelo:\n{output_text}\n{'='*50}")
             
             start = output_text.find('{')
             end = output_text.rfind('}')
