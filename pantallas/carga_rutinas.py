@@ -15,14 +15,15 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.grid_columnconfigure(0, weight=1)
         
         # Estado local
-        self.archivo_seleccionado = None
+        self.archivos_seleccionados = []
         self.ejercicios_procesados = []
+        self.resultados_por_imagen = [] # [{archivo, prefijo, ejercicios}]
         
         # Título
-        self.lbl_titulo = ctk.CTkLabel(self, text="Procesamiento de Rutinas por IA", font=ctk.CTkFont(size=28, weight="bold"))
+        self.lbl_titulo = ctk.CTkLabel(self, text="Digitalizador de Rutinas Pro", font=ctk.CTkFont(size=28, weight="bold"))
         self.lbl_titulo.grid(row=0, column=0, pady=(20, 10), padx=30, sticky="w")
         
-        self.lbl_subtitulo = ctk.CTkLabel(self, text="Sube una foto de tu rutina y deja que la IA haga el trabajo sucio.", font=ctk.CTkFont(size=16))
+        self.lbl_subtitulo = ctk.CTkLabel(self, text="Sube fotos de tus libretas y la IA extraerá los datos automáticamente.", font=ctk.CTkFont(size=16))
         self.lbl_subtitulo.grid(row=1, column=0, pady=(0, 20), padx=30, sticky="w")
 
         # --- SECCIÓN 1: SELECCIÓN DE ATLETA Y ARCHIVO ---
@@ -41,11 +42,11 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.cargar_atletas()
 
         # Botón de Selección de Archivo
-        self.lbl_file = ctk.CTkLabel(self.frame_controles, text="2. Carga la Imagen (JPG/PNG):", font=ctk.CTkFont(weight="bold"))
+        self.lbl_file = ctk.CTkLabel(self.frame_controles, text="2. Carga las Imágenes (JPG/PNG):", font=ctk.CTkFont(weight="bold"))
         self.lbl_file.grid(row=0, column=1, padx=20, pady=(15, 5), sticky="w")
         
-        self.btn_select_file = ctk.CTkButton(self.frame_controles, text="📁 Seleccionar Imagen", 
-                                             command=self.seleccionar_archivo,
+        self.btn_select_file = ctk.CTkButton(self.frame_controles, text="📁 Seleccionar Imágenes", 
+                                             command=self.seleccionar_archivos,
                                              fg_color="#1f6aa5", hover_color="#144870")
         self.btn_select_file.grid(row=1, column=1, padx=20, pady=(0, 15), sticky="w")
         
@@ -70,7 +71,7 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.lbl_res_titulo = ctk.CTkLabel(self.frame_resultados, text="Vista Previa de Ejercicios Detectados", font=ctk.CTkFont(size=18, weight="bold"))
         self.lbl_res_titulo.pack(pady=10)
         
-        self.txt_preview = ctk.CTkTextbox(self.frame_resultados, height=250, font=ctk.CTkFont(family="Consolas", size=13))
+        self.txt_preview = ctk.CTkTextbox(self.frame_resultados, height=350, font=ctk.CTkFont(family="Consolas", size=13))
         self.txt_preview.pack(fill="both", expand=True, padx=20, pady=10)
         self.txt_preview.insert("0.0", "Los resultados aparecerán aquí tras el procesamiento...")
         self.txt_preview.configure(state="disabled")
@@ -90,10 +91,10 @@ class CargaRutinas(ctk.CTkScrollableFrame):
     def mostrar_ayuda(self):
         from tkinter import messagebox
         msg = ("Carga de Rutinas:\n\n"
-               "- Selecciona un atleta y una imagen de su rutina.\n"
-               "- Pulsa 'Procesar con IA' para extraer los ejercicios automáticamente.\n"
-               "- Revisa y edita el texto detectado si es necesario.\n"
-               "- Exporta a Excel o guárdalo en la base de datos.")
+               "- Selecciona un atleta y una o varias fotos.\n"
+               "- Pulsa 'Procesar con IA'. Se usará Ollama (Local) para analizar cada página.\n"
+               "- Cada foto se evalúa de forma independiente.\n"
+               "- Revisa los resultados y guárdalos en la base de datos.")
         messagebox.showinfo("Ayuda: Carga de Rutinas", msg)
 
     def cargar_atletas(self):
@@ -110,15 +111,15 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         except Exception as e:
             app_logger.error(f"Error cargando atletas: {e}")
 
-    def seleccionar_archivo(self):
-        file_path = filedialog.askopenfilename(
-            title="Seleccionar imagen de rutina",
+    def seleccionar_archivos(self):
+        file_paths = filedialog.askopenfilenames(
+            title="Seleccionar imágenes de rutina",
             filetypes=[("Imágenes", "*.png *.jpg *.jpeg"), ("Todos los archivos", "*.*")]
         )
-        if file_path:
-            self.archivo_seleccionado = file_path
-            nombre_base = os.path.basename(file_path)
-            self.lbl_status_file.configure(text=f"Archivo: {nombre_base}", text_color="white")
+        if file_paths:
+            self.archivos_seleccionados = list(file_paths)
+            cant = len(self.archivos_seleccionados)
+            self.lbl_status_file.configure(text=f"{cant} archivos seleccionados", text_color="white")
             self.btn_procesar.configure(state="normal")
 
     def iniciar_procesamiento(self):
@@ -130,63 +131,87 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         atleta_id = int(atleta_str.split(" - ")[0])
         
         # Bloquear UI
-        self.btn_procesar.configure(state="disabled", text="Procesando...")
+        self.btn_procesar.configure(state="disabled", text="Analizando fotos...")
         self.txt_preview.configure(state="normal")
         self.txt_preview.delete("0.0", "end")
-        self.txt_preview.insert("0.0", "Extrayendo texto con OCR y analizando con IA...\nPor favor, espera.")
+        self.txt_preview.insert("0.0", f"Iniciando el análisis de {len(self.archivos_seleccionados)} fotos...\nEstamos leyendo tu libreta, esto puede tardar un poco.\n")
         self.txt_preview.configure(state="disabled")
         
         # Lanzar en hilo para no congelar la UI
-        threading.Thread(target=self.ejecutar_pipeline, args=(atleta_id,), daemon=True).start()
+        threading.Thread(target=self.ejecutar_pipeline_multiple, args=(atleta_id,), daemon=True).start()
 
-    def ejecutar_pipeline(self, atleta_id):
+    def ejecutar_pipeline_multiple(self, atleta_id):
         try:
+            self.resultados_por_imagen = []
+            self.ejercicios_procesados = []
+            
             with SessionLocal() as session:
                 service = RutinasService(session)
-                # Solo procesamos (no guardamos automáticamente en este paso para que el usuario revise)
-                # pero para cumplir con el pedido del usuario de "montar la pipeline de leer la imagen pasarle ese texto a la IA",
-                # lo haremos aquí.
                 
-                from logica.procesador_ocr import OCRProcessor
-                texto_ocr = OCRProcessor.extract_text(self.archivo_seleccionado)
+                for i, path in enumerate(self.archivos_seleccionados, 1):
+                    nombre_foto = os.path.basename(path)
+                    self.actualizar_status_progreso(f"Leyendo foto {i} de {len(self.archivos_seleccionados)} ({nombre_foto})...")
+                    
+                    resultado = service.procesar_imagen_vlm_a_diccionario(path)
+                    
+                    if resultado.get("success"):
+                        res_item = {
+                            "archivo": nombre_foto,
+                            "prefijo": resultado.get("prefijo", ""),
+                            "ejercicios": resultado["data"]
+                        }
+                        self.resultados_por_imagen.append(res_item)
+                        self.ejercicios_procesados.extend(resultado["data"])
+                    else:
+                        app_logger.error(f"Fallo en la foto {path}: {resultado.get('error')}")
                 
-                if not texto_ocr:
-                    self.finalizar_con_error("No se pudo extraer texto de la imagen.")
+                if not self.resultados_por_imagen:
+                    self.finalizar_con_error("No se han podido detectar ejercicios. Prueba con una foto más clara.")
                     return
                 
-                from logica.ia_service import GlinerService
-                ia = GlinerService()
-                resultados = ia.procesar_texto_rutina(texto_ocr)
-                
-                if not resultados:
-                    self.finalizar_con_error("La IA no detectó ejercicios.")
-                    return
-                
-                self.ejercicios_procesados = resultados
-                self.mostrar_previsualizacion(texto_ocr, resultados)
+                # Mostrar en la previsualización consolidada
+                self.mostrar_previsualizacion_multiple()
                 
         except Exception as e:
-            self.finalizar_con_error(f"Error crítico: {str(e)}")
+            self.finalizar_con_error(f"Ha ocurrido un inconveniente: {str(e)}")
+
+    def actualizar_status_progreso(self, msg):
+        self.after(0, lambda: self.txt_preview.configure(state="normal"))
+        self.after(0, lambda: self.txt_preview.insert("end", f"\n- {msg}"))
+        self.after(0, lambda: self.txt_preview.see("end"))
+        self.after(0, lambda: self.txt_preview.configure(state="disabled"))
 
     def finalizar_con_error(self, error):
-        self.after(0, lambda: messagebox.showerror("Error", error))
+        self.after(0, lambda: messagebox.showerror("Atención", error))
         self.after(0, lambda: self.btn_procesar.configure(state="normal", text="⚡ PROCESAR CON IA"))
 
-    def mostrar_previsualizacion(self, texto_ocr, resultados):
+    def mostrar_previsualizacion_multiple(self):
         self.after(0, lambda: self.txt_preview.configure(state="normal"))
         self.after(0, lambda: self.txt_preview.delete("0.0", "end"))
         
-        previa = f"TEXTO EXTRAÍDO (OCR):\n{'-'*30}\n{texto_ocr}\n\n"
-        previa += f"EJERCICIOS DETECTADOS POR IA:\n{'-'*30}\n"
+        previa = "RESUMEN DE DIGITALIZACIÓN MULTI-PÁGINA\n"
+        previa += "="*40 + "\n\n"
         
-        for i, ej in enumerate(resultados, 1):
-            nombre = ej.get("nombre_ejercicio") or ej.get("texto") or "Desconocido"
-            series = ej.get("series", "?")
-            reps = ej.get("repeticiones", "?")
-            peso = ej.get("peso_objetivo") or ej.get("peso_kg", "?")
-            previa += f"{i}. {nombre} | {series} x {reps} | {peso}kg\n"
+        for item in self.resultados_por_imagen:
+            previa += f"📄 ARCHIVO: {item['archivo']}\n"
+            if item['prefijo']:
+                previa += f"📍 CABECERA: {item['prefijo']}\n"
+            previa += "-"*30 + "\n"
+            
+            for i, ej in enumerate(item['ejercicios'], 1):
+                nombre = ej.get("nombre_ejercicio", "Desconocido")
+                series = ej.get("series", "?")
+                reps = ej.get("repeticiones", "?")
+                detalle = ej.get("peso_objetivo", "?")
+                previa += f"  {i}. {nombre} | {series} series | {reps} | {detalle}\n"
+            previa += "\n"
             
         self.after(0, lambda: self.txt_preview.insert("0.0", previa))
+        
+        # Habilitar botones de acción
+        self.after(0, lambda: self.btn_procesar.configure(state="normal", text="⚡ PROCESAR CON IA"))
+        self.after(0, lambda: self.btn_guardar.configure(state="normal"))
+        self.after(0, lambda: self.btn_exportar.configure(state="normal"))
         # No deshabilitamos para que el texto sea editable por el usuario
         
         # Habilitar botones de acción
@@ -199,16 +224,32 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         atleta_id = int(atleta_str.split(" - ")[0])
         nombre_atleta = atleta_str.split(" - ")[1]
         
-        if messagebox.askyesno("Confirmar", f"¿Guardar esta rutina para {nombre_atleta}?"):
+        cant_rutinas = len(self.resultados_por_imagen)
+        if messagebox.askyesno("Confirmar", f"¿Guardar {cant_rutinas} rutinas detectadas para {nombre_atleta}?"):
             try:
+                exitos = 0
                 with SessionLocal() as session:
                     repo = RutinasService(session).repo
-                    nombre_rutina = f"Rutina IA {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-                    if repo.guardar_rutina_completa(atleta_id, nombre_rutina, self.ejercicios_procesados):
-                        messagebox.showinfo("Éxito", "Rutina guardada correctamente en la BBDD.")
-                        self.btn_guardar.configure(state="disabled")
-                    else:
-                        messagebox.showerror("Error", "No se pudo guardar la rutina.")
+                    
+                    for item in self.resultados_por_imagen:
+                        prefijo = item.get('prefijo', '')
+                        archivo = item.get('archivo', '')
+                        base_nombre = f"Rutina IA {datetime.now().strftime('%d/%m/%Y')}"
+                        
+                        # Nombre final combinando cabecera y fecha
+                        if prefijo:
+                            nombre_rutina = f"{prefijo} | {base_nombre} ({archivo})"
+                        else:
+                            nombre_rutina = f"{base_nombre} ({archivo})"
+                            
+                        if repo.guardar_rutina_completa(atleta_id, nombre_rutina, item['ejercicios']):
+                            exitos += 1
+                
+                if exitos > 0:
+                    messagebox.showinfo("Éxito", f"Se han guardado {exitos}/{cant_rutinas} rutinas correctamente.")
+                    self.btn_guardar.configure(state="disabled")
+                else:
+                    messagebox.showerror("Error", "No se pudo guardar ninguna rutina.")
             except Exception as e:
                 messagebox.showerror("Error", str(e))
 

@@ -319,6 +319,7 @@ ABREVIATURAS: Dict[str, str] = {
     "curl predic":     "curl predicador",
     "curl pred":       "curl predicador",
     "curl bien":       "curl predicador",
+    "curl predi":      "curl predicador",
     "curl conc":       "curl concentrado",
     "curl bayes":      "curl bayesian",
     "bayes":           "curl bayesian",
@@ -332,6 +333,7 @@ ABREVIATURAS: Dict[str, str] = {
     "ext cuerda":      "extensiones triceps cuerda",
     "ext polea":       "extensiones triceps polea",
     "ext tras":        "extensiones trasnuca",
+    "tricep tras":     "extensiones trasnuca",
     "ext. tras":       "extensiones trasnuca",
     "exten tras":      "extensiones trasnuca",
     "exten. tras":     "extensiones trasnuca",
@@ -927,14 +929,19 @@ def _parsear_tabla(texto: str) -> List[Dict[str, Any]]:
             if parsed:
                 series.append(parsed)
 
+        # Adaptar al formato esperado por la interfaz y la base de datos
+        rep_val = rango if rango != "—" else (str(series[0]["reps"]) if series else "?")
+        peso_val = str(series[0]["peso_kg"]) if series else "?"
+
         resultados.append({
-            "ejercicio":      ejercicio,
-            "rango_objetivo": rango,
-            "series":         series,
-            "origen":         "tabla",
-            "mesociclo":      meta["mesociclo"],
-            "semana":         meta["semana"],
-            "sesion":         meta["sesion"],
+            "nombre_ejercicio": ejercicio,
+            "repeticiones":     rep_val,
+            "peso_objetivo":    peso_val,
+            "series":           str(len(series)) if series else "0",
+            "origen":           "tabla",
+            "mesociclo":        meta["mesociclo"],
+            "semana":           meta["semana"],
+            "sesion":           meta["sesion"],
         })
 
     return resultados
@@ -1407,7 +1414,7 @@ class GlinerService:
         """
         enriquecidos: List[Dict[str, Any]] = []
         for ej in resultados:
-            nombre_titulo = ej["ejercicio"]
+            nombre_titulo = ej["nombre_ejercicio"]
             nombre_norm = _normalizar_texto_base(nombre_titulo)
 
             # Determinar si GLiNER debe intervenir:
@@ -1429,7 +1436,7 @@ class GlinerService:
                 nombre_corregido = self._enriquecer_nombre_ejercicio(
                     nombre_titulo, ej.get("rango_objetivo", "")
                 )
-                ej = {**ej, "ejercicio": nombre_corregido}
+                ej = {**ej, "nombre_ejercicio": nombre_corregido}
 
             enriquecidos.append(ej)
         return enriquecidos

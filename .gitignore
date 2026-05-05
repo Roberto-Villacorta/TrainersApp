@@ -1,5 +1,39 @@
+# Entornos virtuales
 .venv/
-*.db
-datos_locales/entrenador_app.db
+venv/
+env/
+ENV/
+
+# Modelos de IA (Pesan GBs, no deben subirse a Git)
+modelos_vlm/
+modelos_ia/
+*.bin
+*.pt
+*.safetensors
+*.onnx
+
+# Base de datos y datos locales
+bbdd/*.db
+bbdd/*.sqlite
+datos_locales/
 logs/
 *.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Sistema (Windows/Linux/macOS)
+Thumbs.db
+desktop.ini
+.DS_Store
+.directory
+
+# Temporales y Scratch
+scratch/
+offload_qwen/
+.ipynb_checkpoints/
