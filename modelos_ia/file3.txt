@@ -1,1 +1,0 @@
-Aquí serán guardado el modelo de IA que nos ayudara a procesar el texto de la imagenes 
