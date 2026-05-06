@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import messagebox, filedialog
+from tkinter import filedialog
 from datetime import datetime
 from bbdd.database import SessionLocal
 from logica.atletas_service import AtletasService
@@ -7,6 +7,7 @@ from logica.rutinas_service import RutinasService
 from logica.exportador import ExportadorExcel
 from logica.exercise_data import EJERCICIOS_POR_MUSCULO
 from utils.logger import app_logger
+from utils.dialogos_ayuda import DialogoAyuda
 
 class SesionManual(ctk.CTkScrollableFrame):
     """
@@ -111,14 +112,23 @@ class SesionManual(ctk.CTkScrollableFrame):
                 break
 
     def mostrar_ayuda(self):
-        msg = ("Guía de Carga Manual:\n\n"
-               "- Datos Sesión: Introduce el número de Mesociclo, Semana y Sesión.\n"
-               "- Ejercicios: Elige el músculo para filtrar o escribe un nombre personalizado.\n"
-               "- Series Dinámicas: Pulsa '+ Serie' para añadir un nuevo set (reps/peso/descanso).\n"
-               "- Eliminar Serie: Pulsa la 'x' gris al final de una serie si te equivocas.\n"
-               "- Cardio: Si eliges 'Cardio', solo tendrás que poner el tiempo (ej: 20 min).\n"
-               "- Guardar: Puedes guardar en la base de datos o generar un Excel.")
-        messagebox.showinfo("Ayuda: Carga Manual", msg)
+        titulo = "Guía: Cómo añadir un entrenamiento"
+        msg = (
+            "Esta pantalla sirve para anotar lo que ha hecho tu atleta hoy. Sigue estos pasos:\n\n"
+            "1. ELIGE AL ATLETA: Arriba del todo, selecciona el nombre de la persona que ha entrenado.\n\n"
+            "2. ¿CUÁNDO TOCA?: Escribe el Mesociclo, la Semana y la Sesión. Esto ayuda a llevar un orden (ej: Meso 1, Semana 2, Sesión 1).\n\n"
+            "3. ELIGE EL EJERCICIO:\n"
+            "   - Primero elige el grupo muscular (ej: Pecho).\n"
+            "   - Luego elige el ejercicio de la lista (ej: Press de Banca).\n"
+            "   - Si el ejercicio no está en la lista, puedes escribirlo tú mismo en el cuadro.\n\n"
+            "4. ANOTA LAS SERIES:\n"
+            "   - Pulsa el botón '+ Serie' para añadir una fila nueva.\n"
+            "   - En cada fila pon las repeticiones, el peso (en kilos) y cuánto tiempo descansó.\n"
+            "   - Si te equivocas, pulsa la 'X' roja al final de la fila para borrar esa serie.\n\n"
+            "5. CARDIO: Si eliges 'Cardio', solo tendrás que poner el tiempo (ej: 20 min).\n\n"
+            "6. GUARDAR: Cuando acabes, pulsa el botón verde 'Guardar en el Programa' para que no se pierda nada."
+        )
+        DialogoAyuda(self, titulo, msg)
 
     def añadir_fila_ejercicio(self):
         fila_container = ctk.CTkFrame(self.frame_lista_ejercicios)

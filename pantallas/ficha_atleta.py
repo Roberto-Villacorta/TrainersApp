@@ -15,6 +15,7 @@ from logica.stats_service import StatsService
 from bbdd.models import FormularioSemanal
 from logica.ia_form_service import IAFormService
 from utils.logger import app_logger
+from utils.dialogos_ayuda import DialogoAyuda
 
 class DialogoVerFormulario(ctk.CTkToplevel):
     def __init__(self, master_ficha, form: FormularioSemanal, nombre_atleta: str):
@@ -290,11 +291,18 @@ class FichaAtleta(ctk.CTkScrollableFrame):
         self.frame_contenido.pack(fill="both", expand=True, padx=20, pady=10)
 
     def mostrar_ayuda(self):
-        msg = ("Ficha del Atleta:\n\n"
-               "- Información General: Consulta los datos básicos y la foto del cliente.\n"
-               "- Formularios: Añade el reporte semanal. Contiene análisis automático por IA.\n"
-               "- Gráficos: Compara el último reporte con el anterior.")
-        messagebox.showinfo("Ayuda: Ficha de Atleta", msg)
+        titulo = "Guía: La Ficha del Atleta"
+        msg = (
+            "Aquí puedes ver toda la información de tu atleta de un vistazo:\n\n"
+            "1. FOTO Y NOMBRE: Arriba ves quién es. Puedes pulsar 'Volver' para ir a la lista de todos tus alumnos.\n\n"
+            "2. BOTONES DE ACCIÓN:\n"
+            "   - 'Añadir Formulario': Sirve para anotar cómo se siente el atleta esta semana (si está cansado, si tiene hambre, etc.).\n"
+            "   - 'Añadir Entrenamiento': Te lleva a la pantalla para anotar qué ejercicios ha hecho hoy.\n\n"
+            "3. ENTRENAMIENTOS GUARDADOS: Verás una lista de los días que ha entrenado. Si pulsas sobre uno, verás exactamente qué ejercicios hizo.\n\n"
+            "4. ANÁLISIS DE PROGRESO: Aquí verás unos gráficos que comparan cómo estaba el atleta antes y cómo está ahora. Si hay algo preocupante (como mucho dolor), la Inteligencia Artificial te avisará con un mensaje azul arriba.\n\n"
+            "5. HISTORIAL: Abajo del todo tienes una lista de todos los formularios que ha rellenado. Pulsa en cualquiera para leerlo completo."
+        )
+        DialogoAyuda(self, titulo, msg)
 
 
     def abrir_formulario(self):

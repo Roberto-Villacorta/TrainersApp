@@ -6,6 +6,8 @@ from datetime import datetime
 from bbdd.database import SessionLocal
 from logica.dashboard_service import DashboardService
 from utils.logger import app_logger
+from utils.dialogos_ayuda import DialogoAyuda
+from tkinter import messagebox
 
 class DialogoGestionLlamadas(ctk.CTkToplevel):
     def __init__(self, master_dashboard, dia, fecha_llamada, llamadas):
@@ -193,16 +195,19 @@ class Dashboard(ctk.CTkScrollableFrame):
             self.after(150, self.verificar_cola_metricas)
 
     def mostrar_ayuda(self):
-        from tkinter import messagebox
-        msg = ("Bienvenido al Dashboard.\n\n"
-               "- Atletas Activos: Muestra el total de clientes vigentes.\n"
-               "- Formularios Pendientes: Te avisa cuántos atletas deben rellenar su reporte.\n"
-               "- Calendario: Gestiona tus llamadas y ve fechas de pago.\n"
-               "  - Azul: Llamadas programadas.\n"
-               "  - Verde: Renovaciones/Pagos.\n"
-               "  - Naranja: Ambos eventos el mismo día.\n"
-               "Haz clic en un día para añadir o editar llamadas.")
-        messagebox.showinfo("Ayuda: Dashboard", msg)
+        titulo = "Guía: El Panel de Control (Dashboard)"
+        msg = (
+            "Esta es la pantalla principal donde ves un resumen de todo tu trabajo:\n\n"
+            "1. ATLETAS ACTIVOS: El número grande en azul te dice a cuántas personas estás entrenando ahora mismo.\n\n"
+            "2. FORMULARIOS PENDIENTES: El número en rojo te dice cuántos alumnos han enviado su reporte y tú aún no lo has leído.\n\n"
+            "3. EL CALENDARIO:\n"
+            "   - Sirve para apuntar llamadas o ver cuándo toca cobrar.\n"
+            "   - COLOR AZUL: Tienes una llamada apuntada ese día.\n"
+            "   - COLOR VERDE: Ese día le toca pagar a un alumno.\n"
+            "   - COLOR NARANJA: Ese día tienes las dos cosas (llamada y cobro).\n\n"
+            "   Si pulsas sobre cualquier día, podrás anotar el nombre de alguien para llamarle."
+        )
+        DialogoAyuda(self, titulo, msg)
 
     def actualizar_dashboard(self):
         """Refresca métricas y calendario lanzando la consulta en un hilo secundario."""

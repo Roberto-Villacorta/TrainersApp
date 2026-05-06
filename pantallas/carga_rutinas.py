@@ -9,6 +9,7 @@ from logica.atletas_service import AtletasService
 from logica.rutinas_service import RutinasService
 from logica.vlm_service import VLMService
 from utils.logger import app_logger
+from utils.dialogos_ayuda import DialogoAyuda
 
 class CargaRutinas(ctk.CTkScrollableFrame):
     def __init__(self, master, **kwargs):
@@ -117,14 +118,17 @@ class CargaRutinas(ctk.CTkScrollableFrame):
             self.after(100, self.verificar_cola_ui)
 
     def mostrar_ayuda(self):
-        from tkinter import messagebox
-        msg = ("Escanear Libreta:\n\n"
-               "- Selecciona un atleta y una o varias fotos.\n"
-               "- Pulsa 'Analizar Foto'.\n"
-               "- El programa leerá el texto por ti.\n"
-               "- Revisa que todo esté bien y guárdalo.\n\n"
-               "Nota: Esta función requiere una GPU NVIDIA para funcionar.")
-        messagebox.showinfo("Ayuda", msg)
+        titulo = "Guía: Escanear fotos de la libreta"
+        msg = (
+            "Esta función permite que el programa lea por ti las fotos de los entrenamientos escritos a mano. Sigue estos pasos:\n\n"
+            "1. ELIGE AL ATLETA: Selecciona el nombre del alumno al que pertenecen las fotos.\n\n"
+            "2. SUBE LAS FOTOS: Pulsa el botón azul 'Seleccionar Imágenes' y elige las fotos de la libreta que tengas en tu ordenador.\n\n"
+            "3. ANALIZAR: Pulsa el botón verde grande 'ANALIZAR FOTO'. El ordenador tardará unos segundos en 'leer' la letra.\n\n"
+            "4. REVISA: Verás que aparece el texto en el cuadro de abajo. Asegúrate de que los nombres de los ejercicios y los pesos son correctos.\n\n"
+            "5. GUARDA: Si todo está bien, pulsa 'Guardar en el Programa'.\n\n"
+            "⚠️ IMPORTANTE: Esta función solo funciona en ordenadores muy potentes con tarjeta gráfica NVIDIA (GPU). Si el botón sale en gris, es porque tu ordenador no tiene la potencia necesaria para esta Inteligencia Artificial."
+        )
+        DialogoAyuda(self, titulo, msg)
 
     def cargar_atletas(self):
         try:

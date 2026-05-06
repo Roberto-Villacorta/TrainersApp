@@ -9,6 +9,7 @@ from logica.atletas_service import AtletasService
 from logica.media_service import MediaService
 from utils.dialogos_atletas import DialogoRegistrarAtleta, DialogoActualizarAtleta, DialogoBorrarAtleta
 from utils.dialogo_calendario import DialogoSeleccionarFecha
+from utils.dialogos_ayuda import DialogoAyuda
 from tkinter import messagebox
 
 class ListadoAtletas(ctk.CTkFrame):
@@ -59,13 +60,15 @@ class ListadoAtletas(ctk.CTkFrame):
             self.after(100, self.verificar_cola)
 
     def mostrar_ayuda(self):
-        from tkinter import messagebox
-        msg = ("Gestión de Atletas:\n\n"
-               "- Nuevo Atleta: Añade un nuevo cliente al sistema.\n"
-               "- Editar/Baja: Modifica o elimina datos de atletas existentes.\n"
-               "- Ver Inactivos: Alterna entre clientes activos y los que ya no están en el programa.\n"
-               "- Ver Ficha: Haz clic sobre cualquier tarjeta para abrir su perfil detallado.")
-        messagebox.showinfo("Ayuda: Atletas", msg)
+        titulo = "Guía: Tu lista de alumnos"
+        msg = (
+            "Aquí es donde organizas a todas las personas a las que entrenas:\n\n"
+            "1. NUEVO ATLETA: Pulsa el botón azul para añadir a alguien que acaba de empezar contigo.\n\n"
+            "2. EDITAR O BORRAR: Si te has equivocado en el nombre o si alguien deja de entrenar, usa los botones 'Editar' o 'Baja'.\n\n"
+            "3. VER INACTIVOS: Si pulsas este botón gris, verás a la gente que ya no entrena contigo. Puedes volver a activarlos si regresan.\n\n"
+            "4. ABRIR FICHA: Si pulsas sobre el nombre o la foto de cualquier alumno, se abrirá su ficha completa para ver sus progresos."
+        )
+        DialogoAyuda(self, titulo, msg)
 
     def obtener_atletas_activos(self):
         with SessionLocal() as session:
