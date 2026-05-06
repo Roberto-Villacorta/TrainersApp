@@ -77,6 +77,40 @@ class MainApp(ctk.CTk):
         # Arrancar siempre en el Dashboard
         self.pantalla_actual = "dashboard"
         self.mostrar_pantalla("dashboard")
+        
+        # Verificar pagos al iniciar (Heurística: Prevención de errores / Visibilidad del estado)
+        self.after(2000, self.verificar_pagos)
+
+    def verificar_pagos(self):
+        """Revisa si hay atletas con suscripciones vencidas y pregunta al usuario."""
+        try:
+            from bbdd.database import SessionLocal
+            from logica.atletas_service import AtletasService
+            from tkinter import messagebox
+            
+            with SessionLocal() as session:
+                service = AtletasService(session)
+                vencidas = service.obtener_suscripciones_vencidas()
+                
+                for sub in vencidas:
+                    atleta = sub.atleta
+                    pregunta = f"¿El atleta {atleta.nombre_completo} ha pagado la renovación?\n\n(Fecha límite era: {sub.fecha_renovacion.strftime('%d/%m/%Y')})"
+                    
+                    if messagebox.askyesno("Cobro de Suscripción", pregunta):
+                        service.registrar_pago(sub.id)
+                        messagebox.showinfo("Pago Registrado", f"Suscripción de {atleta.nombre_completo} renovada por 3 meses más.")
+                    else:
+                        service.cambiar_estado(atleta.id, "inactivo")
+                        messagebox.showwarning("Atleta Desactivado", f"El atleta {atleta.nombre_completo} ha sido marcado como INACTIVO por falta de pago.")
+            
+            # Si se desactivaron atletas, refrescar la lista o el dashboard si están abiertos
+            if self.pantalla_actual == "atletas":
+                self.pantallas["atletas"].renderizar_lista()
+            elif self.pantalla_actual == "dashboard":
+                self.pantallas["dashboard"].actualizar_dashboard()
+                
+        except Exception as e:
+            print(f"Error verificando pagos: {e}")
 
         # Scroll global con la rueda del ratón: se delega al canvas interno
         # de la pantalla activa sin importar sobre qué widget esté el cursor.
@@ -160,6 +194,12 @@ class MainApp(ctk.CTk):
         """
         self.pantallas["ficha_atleta"].cargar_atleta(id_atleta)
         self.mostrar_pantalla("ficha_atleta")
+
+    def ir_a_entrenamiento_manual(self, id_atleta):
+        """Navega a la pantalla de sesión manual y pre-selecciona al atleta."""
+        self.mostrar_pantalla("manual")
+        if hasattr(self.pantallas["manual"], "seleccionar_atleta"):
+            self.pantallas["manual"].seleccionar_atleta(id_atleta)
 
     def mostrar_pantalla(self, nombre_pantalla):
         """

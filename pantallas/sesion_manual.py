@@ -99,6 +99,17 @@ class SesionManual(ctk.CTkScrollableFrame):
         except Exception as e:
             app_logger.error(f"Error cargando atletas: {e}")
 
+    def seleccionar_atleta(self, id_atleta):
+        """Pre-selecciona un atleta en el combo basándose en su ID."""
+        # Asegurarse de que los valores están cargados
+        self.cargar_atletas()
+        
+        valores = self.combo_atletas.cget("values")
+        for val in valores:
+            if val.startswith(f"{id_atleta} - "):
+                self.combo_atletas.set(val)
+                break
+
     def mostrar_ayuda(self):
         msg = ("Guía de Carga Manual:\n\n"
                "- Datos Sesión: Introduce el número de Mesociclo, Semana y Sesión.\n"

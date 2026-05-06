@@ -5,6 +5,7 @@ import threading
 from PIL import Image, ImageDraw
 from tkinter import messagebox
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from bbdd.database import SessionLocal
@@ -13,6 +14,7 @@ from logica.media_service import MediaService
 from logica.stats_service import StatsService
 from bbdd.models import FormularioSemanal
 from logica.ia_form_service import IAFormService
+from utils.logger import app_logger
 
 class DialogoVerFormulario(ctk.CTkToplevel):
     def __init__(self, master_ficha, form: FormularioSemanal, nombre_atleta: str):
@@ -223,18 +225,24 @@ class DialogoFormulario(ctk.CTkToplevel):
                 nuevo_form.alerta_estres      = alertas["alerta_estres"]
                 nuevo_form.alerta_rendimiento = alertas["alerta_rendimiento"]
 
-                self.master_ficha.ultimo_resumen_ia = resultado_ia["resumen"]
-
                 session.add(nuevo_form)
                 session.commit()
 
-            # Volver al hilo principal para actualizar la UI
-            self.after(0, lambda: messagebox.showinfo("Éxito", "Formulario guardado con éxito."))
-            self.after(0, lambda: self.master_ficha.cargar_atleta(datos["atleta_id"]))
-            self.after(0, self.destroy)
+            # Volver al hilo principal para actualizar la UI de forma atómica
+            def finalizar():
+                if self.winfo_exists():
+                    messagebox.showinfo("Éxito", "Formulario guardado con éxito.")
+                    self.master_ficha.ultimo_resumen_ia = resultado_ia["resumen"]
+                    self.master_ficha.cargar_atleta(datos["atleta_id"])
+                    self.destroy()
+            
+            self.after(0, finalizar)
         except Exception as e:
-            self.after(0, lambda: messagebox.showerror("Error", f"Error guardando formulario: {e}"))
-            self.after(0, lambda: self.btn_guardar.configure(state="normal", text="Guardar Formulario"))
+            def reportar_error(msg):
+                if self.winfo_exists():
+                    messagebox.showerror("Error", msg)
+                    self.btn_guardar.configure(state="normal", text="Guardar Formulario")
+            self.after(0, lambda: reportar_error(f"Error guardando formulario: {e}"))
 
 class FichaAtleta(ctk.CTkScrollableFrame):
     def __init__(self, master, master_app, **kwargs):
@@ -271,6 +279,11 @@ class FichaAtleta(ctk.CTkScrollableFrame):
         self.btn_formulario = ctk.CTkButton(self.frame_perfil, text="Añadir Formulario", width=160, 
                                             fg_color="#2e8c4a", hover_color="#1b5e20", command=self.abrir_formulario)
         self.btn_formulario.pack(side="right", padx=20, pady=20)
+
+        # Botón para añadir entrenamiento manual (Nuevo)
+        self.btn_entrenamiento = ctk.CTkButton(self.frame_perfil, text="Añadir Entrenamiento", width=160, 
+                                               fg_color="#1f6aa5", hover_color="#144870", command=self.ir_a_entrenamiento)
+        self.btn_entrenamiento.pack(side="right", padx=10, pady=20)
         
         # Frame Contenido Adicional (Gráficos y Resumen)
         self.frame_contenido = ctk.CTkFrame(self, fg_color="transparent")
@@ -417,7 +430,8 @@ class FichaAtleta(ctk.CTkScrollableFrame):
             if peor:
                 ctk.CTkLabel(f_cambios, text=f"PEOR CAMBIO: {peor['nombre']} ({peor['diff']})", font=ctk.CTkFont(weight="bold"), text_color="#c25757").pack(side="right", padx=20)
 
-            fig, ax = plt.subplots(figsize=(6, 4), facecolor='#2b2b2b')
+            fig = Figure(figsize=(6, 4), dpi=100, facecolor='#2b2b2b')
+            ax = fig.add_subplot(111)
             ax.set_facecolor('#2b2b2b')
             ax.tick_params(colors='white')
             for spine in ax.spines.values():
@@ -439,7 +453,6 @@ class FichaAtleta(ctk.CTkScrollableFrame):
             canvas = FigureCanvasTkAgg(fig, master=self.frame_contenido)
             canvas.draw()
             canvas.get_tk_widget().pack(fill="both", expand=True, pady=20)
-            plt.close(fig)
         else:
             ctk.CTkLabel(self.frame_contenido, text="Se necesita al menos otro formulario para ver la comparativa. ¡Buen comienzo!", font=ctk.CTkFont(size=14, slant="italic")).pack(pady=40)
 
@@ -462,8 +475,12 @@ class FichaAtleta(ctk.CTkScrollableFrame):
         DialogoVerRutina(self, rutina)
 
     def volver_al_listado(self):
-        if hasattr(self.master_app, "mostrar_pantalla"):
-            self.master_app.mostrar_pantalla("atletas")
+        self.master_app.mostrar_pantalla("atletas")
+
+    def ir_a_entrenamiento(self):
+        """Navega a la pantalla de carga manual con el atleta actual seleccionado."""
+        if self.id_atleta_actual:
+            self.master_app.ir_a_entrenamiento_manual(self.id_atleta_actual)
 
 class DialogoVerRutina(ctk.CTkToplevel):
     def __init__(self, master, rutina):

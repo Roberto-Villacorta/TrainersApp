@@ -170,3 +170,13 @@ class ListadoAtletas(ctk.CTkFrame):
         app = self.winfo_toplevel()
         if hasattr(app, "mostrar_ficha_atleta"):
             app.mostrar_ficha_atleta(id_atleta)
+
+    def alternar_estado_atleta(self, id_atleta, nuevo_estado):
+        """Cambia el estado de un atleta y refresca la lista."""
+        try:
+            with SessionLocal() as session:
+                service = AtletasService(session)
+                if service.cambiar_estado(id_atleta, nuevo_estado):
+                    self.renderizar_lista()
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo cambiar el estado: {e}")
