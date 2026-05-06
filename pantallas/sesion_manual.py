@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 from datetime import datetime
 from bbdd.database import SessionLocal
 from logica.atletas_service import AtletasService

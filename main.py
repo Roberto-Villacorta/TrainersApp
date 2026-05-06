@@ -148,14 +148,15 @@ class MainApp(ctk.CTk):
     def _on_mousewheel(self, event):
         """
         Intercepta el evento de rueda del ratón a nivel global y lo redirige
-        al canvas interno (CTkScrollableFrame._parent_canvas) de la pantalla
-        activa, lanzando la animación de scroll suave.
-
-        La normalización de ``event.delta`` varía por plataforma:
-        - Windows: delta en múltiplos de 120 (positivo = arriba).
-        - macOS: delta directo (positivo = arriba).
-        - Linux: Button-4 = arriba, Button-5 = abajo.
+        al canvas interno de la pantalla activa.
         """
+        # Si el evento viene de un diálogo (Toplevel), no hacemos scroll en la pantalla principal
+        try:
+            if event.widget.winfo_toplevel() != self:
+                return
+        except:
+            return
+
         if hasattr(self, "pantalla_actual") and self.pantalla_actual in self.pantallas:
             pantalla = self.pantallas[self.pantalla_actual]
             if hasattr(pantalla, "_parent_canvas"):

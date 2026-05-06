@@ -1,6 +1,6 @@
 # TrainersApp
 
-Aplicación de escritorio desarrollada en **Python + CustomTkinter** para ayudar a entrenadores personales en el seguimiento de sus atletas. Automatiza la extracción de datos de rutinas de entrenamiento escritas a mano mediante OCR e IA, y centraliza el seguimiento semanal en una base de datos local SQLite.
+Aplicación de escritorio profesional desarrollada en **Python + CustomTkinter** diseñada para entrenadores personales. Permite digitalizar entrenamientos, realizar un seguimiento exhaustivo de atletas mediante Inteligencia Artificial y gestionar el control de pagos y suscripciones de forma automatizada.
 
 ---
 
@@ -11,62 +11,55 @@ Aplicación de escritorio desarrollada en **Python + CustomTkinter** para ayudar
 3. [Funcionalidades principales](#funcionalidades-principales)
 4. [Stack tecnológico](#stack-tecnológico)
 5. [Instalación y puesta en marcha](#instalación-y-puesta-en-marcha)
-6. [Módulo de IA — ia\_service](#módulo-de-ia--ia_service)
-7. [Tests](#tests)
-8. [Logs](#logs)
-9. [Solución de problemas](#solución-de-problemas)
-10. [Notas de desarrollo](#notas-de-desarrollo)
+6. [Módulo de IA y Escaneo](#módulo-de-ia-y-escaneo)
+7. [Control de Pagos y Suscripciones](#control-de-pagos-y-suscripciones)
+8. [Ayuda y Guía de Uso](#ayuda-y-guía-de-uso)
 
 ---
 
 ## Descripción
 
-TrainersApp reduce el trabajo manual de los entrenadores centralizando:
+TrainersApp centraliza la gestión de un centro de entrenamiento personal reduciendo la carga administrativa mediante:
 
-- **Seguimiento de atletas** — fichas individuales con historial de formularios semanales.
-- **Procesado automático de rutinas** — el entrenador fotografía el cuaderno y OCR + IA generan datos estructurados listos para comparar y exportar.
-- **Comparativas de progreso y análisis IA** — gráficas generadas con Matplotlib que comparan la evolución semana a semana, con resúmenes automáticos extraídos por GLiNER de las respuestas del atleta.
-- **Calendario de llamadas y formularios pendientes** — recordatorios integrados en el Dashboard cruzando datos de suscripciones, llamadas y el último domingo registrado.
+- **Digitalización Inteligente**: Escaneo de libretas manuscritas usando modelos VLM (Vision-Language Models) locales.
+- **Control de Suscripciones**: Gestión automatizada de pagos cada 3 meses con avisos preventivos al iniciar la aplicación.
+- **Análisis de Progreso por IA**: Los reportes semanales son analizados por una IA (GLiNER) para detectar alertas de fatiga, estrés o estancamiento.
+- **Ficha del Atleta 360°**: Historial completo de entrenamientos, comparativas gráficas de métricas y acceso rápido a nuevas sesiones.
 
 ---
 
 ## Estructura del proyecto
 
+El proyecto ha sido optimizado para contener únicamente los archivos esenciales de producción:
+
 ```
 TrainersApp/
 ├── main.py                    # Punto de entrada de la aplicación
 ├── requirements.txt           # Dependencias Python
-├── conftest.py                # Configuración de pytest (marcadores)
-├── scratch_test_gliner.py     # Script de inspección manual de GLiNER
+├── GUIA_DE_USO.md             # Manual de usuario simplificado para no técnicos
 │
-├── logica/                    # Capa de lógica de negocio
-│   ├── ia_service.py          # Servicio de IA: OCR → expansión → GLiNER
-│   ├── ia_form_service.py     # Análisis de formularios semanales (singleton)
-│   ├── atletas_service.py     # CRUD de atletas
-│   ├── dashboard_service.py   # Datos para el Dashboard
-│   ├── exportador.py          # Exportación a Excel / CSV
-│   ├── parser_rutinas.py      # Parser auxiliar de rutinas
-│   └── procesador_ocr.py      # Interfaz con pytesseract
+├── logica/                    # Capa de lógica de negocio y servicios
+│   ├── ia_service.py          # Análisis de texto NER (GLiNER)
+│   ├── vlm_service.py         # Escaneo de imágenes (Vision AI)
+│   ├── atletas_service.py     # Gestión de atletas y suscripciones
+│   ├── rutinas_service.py     # Persistencia y lógica de entrenamientos
+│   └── stats_service.py       # Procesamiento de métricas para gráficos
 │
-├── pantallas/                 # Vistas CustomTkinter
-│   ├── dashboard.py
-│   ├── listado_atletas.py
-│   ├── ficha_atleta.py        # Formulario semanal + gráficos comparativos
-│   └── carga_rutinas.py
+├── pantallas/                 # Vistas CustomTkinter (Interfaz)
+│   ├── dashboard.py           # Resumen general y calendario
+│   ├── listado_atletas.py     # Gestión de la cartera de clientes
+│   ├── ficha_atleta.py        # Perfil detallado y reportes IA
+│   ├── carga_rutinas.py       # Interfaz de escaneo VLM
+│   └── sesion_manual.py       # Carga manual optimizada de ejercicios
 │
-├── utils/
-│   ├── logger.py              # Logger rotativo (consola + archivo)
-│   ├── dialogo_calendario.py
-│   └── dialogos_atletas.py
+├── utils/                     # Herramientas auxiliares
+│   ├── dialogos_ayuda.py      # Sistema de ayuda con ventanas grandes
+│   ├── dialogo_calendario.py  # Selector de fecha visual
+│   └── logger.py              # Registro de eventos y errores
 │
-├── bbdd/                      # Modelos SQLAlchemy y base de datos
-├── datos_locales/             # Datos de configuración locales
-├── modelos_ia/                # Caché local de modelos HuggingFace (auto-generada)
-├── logs/                      # Archivos de log rotativos (auto-generada)
-│
-└── tests/                     # Suite de tests automatizados (pytest)
-    ├── __init__.py
-    └── test_ia_service.py     # 131 tests del módulo ia_service
+├── bbdd/                      # Modelos SQLAlchemy (SQLite)
+├── datos_locales/             # Carpeta de base de datos y configuración
+└── modelos_vlm/               # Pesos de los modelos de IA (locales)
 ```
 
 ---
@@ -77,30 +70,11 @@ TrainersApp/
 
 | Página | Descripción |
 |---|---|
-| Dashboard | Número de atletas activos, formularios pendientes calculados desde el último domingo y calendario interactivo de llamadas/pagos |
-| Listado de Atletas | Vista completa de la cartera, búsqueda y alta de nuevos atletas |
-| Ficha Individual | Formulario de 10 preguntas semanales, historial clicable, gráficos comparativos con Matplotlib y alertas automáticas por IA |
-| Carga de Archivos | El entrenador sube fotos del cuaderno y el sistema procesa automáticamente con OCR + IA |
-
-### Flujo de procesado de rutinas
-
-```
-Foto cuaderno ──► pytesseract (OCR) ──► ia_service ──► Datos estructurados
-                                              │
-                              ┌───────────────┴───────────────┐
-                              │ Texto tabular                  │ Texto libre
-                              ▼                               ▼
-                         Parser directo               GLiNER (NER neuronal)
-                         (sin modelo)                 urchade/gliner_multi-v2.1
-```
-
-### Formulario semanal del atleta
-
-Cada ficha incluye un formulario de **10 preguntas semanales** guardadas en la base de datos. Al abrirla verás:
-
-- **Resumen de IA** — GLiNER analiza las respuestas de texto libre y detecta señales de fatiga, dolor, estrés o mejora.
-- **Gráfico comparativo** — Matplotlib visualiza la evolución entre el formulario actual y el anterior (satisfacción, mejora, consumo de alimentos).
-- **Historial clicable** — lista de todos los formularios pasados; al hacer clic se abre una vista de solo lectura con las respuestas de ese día.
+| **Dashboard** | Resumen de atletas activos, formularios pendientes y calendario de llamadas/pagos interactivo. |
+| **Listado de Atletas** | Gestión de clientes activos e inactivos, con reactivación automática y control de deudas. |
+| **Ficha Individual** | Gráficos Matplotlib comparativos, alertas de IA basadas en reportes y acceso al historial de sesiones. |
+| **Carga Manual** | Interfaz optimizada para añadir entrenamientos por mesociclo/semana con series dinámicas y soporte de cardio. |
+| **Escaneo VLM** | Uso de IA de visión local para "leer" fotos de libretas y digitalizarlas automáticamente (Requiere GPU). |
 
 ---
 
@@ -108,238 +82,51 @@ Cada ficha incluye un formulario de **10 preguntas semanales** guardadas en la b
 
 | Capa | Tecnología |
 |---|---|
-| Interfaz gráfica | `customtkinter >= 5.2.0` |
-| Base de datos | `SQLAlchemy >= 2.0.0` + SQLite |
-| OCR | `pytesseract >= 0.3.10` + `Pillow >= 10.0.0` |
-| IA / NER | `gliner >= 0.2.3` (modelo `urchade/gliner_multi-v2.1`) |
-| Gráficos | `matplotlib >= 3.7.0` |
-| Exportación | `pandas >= 2.0.0` + `openpyxl >= 3.1.2` |
-| PDF | `pdf2image >= 1.16.3` |
-| Tests | `pytest >= 9.0` |
-| Logging | `logging` estándar con `RotatingFileHandler` |
+| Interfaz gráfica | `customtkinter` (Moderna, modo oscuro/claro) |
+| Base de datos | `SQLAlchemy` + SQLite (Local y privada) |
+| IA de Visión | `transformers` + `qwen2_vl` (Procesamiento VLM local) |
+| IA de Texto | `gliner` (Extracción de entidades en reportes) |
+| Gráficos | `matplotlib` (Integración nativa en la UI) |
+| Exportación | `pandas` + `openpyxl` (Generación de Excel) |
 
 ---
 
 ## Instalación y puesta en marcha
 
-### 1. Clonar el repositorio
+### 1. Requisitos previos
+- Python 3.10 o superior.
+- **Opcional pero recomendado**: Tarjeta gráfica NVIDIA (8GB+ VRAM) para usar el escaneo de fotos por IA.
 
+### 2. Instalación
 ```bash
-git clone <url-del-repo>
-cd TrainersApp
-```
-
-### 2. Crear y activar el entorno virtual
-
-```bash
-# Crear entorno
+# Crear y activar entorno
 python -m venv .venv
-
-# Activar (PowerShell)
 .venv\Scripts\activate
 
-# Activar (CMD)
-.venv\Scripts\activate.bat
-```
-
-> **VS Code:** `Ctrl + Shift + P` → *Python: Select Interpreter* → selecciona `.venv`
-
-### 3. Instalar dependencias
-
-```bash
+# Instalar dependencias
 pip install -r requirements.txt
-pip install pytest   # solo si vas a correr los tests
 ```
 
-### 4. Requisitos del sistema — OCR
-
-Para que el procesamiento de fotos funcione necesitas **Tesseract OCR** instalado en el sistema:
-
-- **Windows:** Descarga el instalador de [UB-Mannheim](https://github.com/UB-Mannheim/tesseract/wiki). Añade la ruta (ej. `C:\Program Files\Tesseract-OCR`) a las variables de entorno (`PATH`).
-- **Idiomas:** Se recomienda instalar los datos de entrenamiento para español (`spa`).
-
-> La primera vez que se use el módulo de IA, el modelo GLiNER (`urchade/gliner_multi-v2.1`) se descargará automáticamente en `modelos_ia/` (unos 200 MB). Las ejecuciones posteriores usan la caché local.
-
-### 5. Lanzar la aplicación
-
+### 3. Ejecución
 ```bash
 python main.py
 ```
 
 ---
 
-## Módulo de IA — ia_service
+## Control de Pagos y Suscripciones
 
-**Ubicación:** `logica/ia_service.py`
-
-Módulo central que extrae datos estructurados de ejercicios a partir de texto OCR. Incluye normalización inteligente mediante clasificación Zero-shot y un pipeline de dos niveles.
-
-### Constantes configurables
-
-| Constante | Valor | Descripción |
-|---|---|---|
-| `MODEL_NAME` | `"urchade/gliner_multi-v2.1"` | Modelo GLiNER en HuggingFace Hub |
-| `THRESHOLD_DEFAULT` | `0.4` | Umbral de confianza mínimo para aceptar entidades |
-| `MODEL_DIR` | `modelos_ia` | Carpeta local de caché de modelos |
-
-### Clase principal: `GlinerService`
-
-```python
-from logica.ia_service import GlinerService
-
-serv = GlinerService()
-
-# Procesar texto de OCR (tabular o libre)
-resultados = serv.procesar_texto_rutina(texto_ocr)
-
-# Procesar con trazabilidad completa (debug / tests)
-info = serv.procesar_texto_rutina_debug(texto_ocr)
-print(info["modo_detectado"])   # "tabla" | "gliner"
-print(info["metadatos"])        # {"mesociclo": "9", "semana": "55", "sesion": "71"}
-```
-
-### Normalización inteligente — pipeline híbrido de 3 niveles
-
-El sistema resuelve incluso los casos más difíciles de OCR sucio:
-
-| Tipo | Ejemplo |
-|---|---|
-| Acrónimos y shorthands | `"pm"` → `"Peso Muerto"`, `"rdl"` → `"Peso Muerto Rumano"` |
-| Truncamientos extremos | `"p pla"` → `"Press Plano"` |
-| Palabras pegadas | `"elevlatmanc"` → `"Elevaciones Laterales"` |
-| Artefactos de OCR | `"PM.RDL_3x100"` → `"Peso Muerto Rumano"` |
-| Sinónimos y variantes | `"tiron polea pecho"` → `"Jalón Al Pecho"` |
-
-GLiNER actúa como juez semántico, mientras que el **Segmented Safety Net** rescata ejercicios que la IA no detecta mediante búsqueda estructural por fragmentos. El catálogo nativo supera los **100 ejercicios** (pecho, espalda, pierna, hombro, core, etc.).
-
-### Añadir nuevos ejercicios
-
-Si el sistema no reconoce un ejercicio concreto:
-
-1. Añádelo a `EJERCICIOS_CANONICOS` en `logica/ia_service.py` para que el Smart Matcher lo reconozca.
-2. Añade una entrada en `ABREVIATURAS` si el OCR suele leerlo de forma errónea o truncada.
-
-### Expansión de abreviaturas (`ABREVIATURAS`)
-
-```
-"Kckton"    →  "Patada Tríceps"
-"Sent bulg" →  "Sentadilla Búlgara"
-"Curl bien" →  "Curl Predicador"
-"pm rum"    →  "Peso Muerto Rumano"
-```
-
-### Detección automática de formato
-
-- **Tabular** (tabs o espacios dobles): parser directo determinístico. Si hay ejercicios desconocidos, se activa el enriquecimiento con IA de forma autónoma.
-- **Texto libre**: el modelo GLiNER extrae entidades como `ejercicio`, `series`, `repeticiones`, `peso en kg` y `descanso`.
-
-### Metadatos extraídos
-
-Si el texto contiene una cabecera de planificación, se extraen automáticamente:
-
-| Campo | Ejemplo |
-|---|---|
-| `mesociclo` | `"9"` |
-| `semana` | `"55"` |
-| `sesion` | `"71"` o `"P1"` |
-
-### Salida del parser tabular
-
-```json
-[
-  {
-    "ejercicio":      "Press Plano",
-    "rango_objetivo": "7-12",
-    "series":         [{"reps": 10, "peso_kg": 100.0}],
-    "origen":         "tabla",
-    "mesociclo":      "9",
-    "semana":         "55",
-    "sesion":         "71"
-  }
-]
-```
-
-### Salida de GLiNER (texto libre)
-
-```json
-[
-  {"tipo": "ejercicio",    "texto": "Press Banca", "confianza": 0.87, "origen": "gliner"},
-  {"tipo": "repeticiones", "texto": "10",          "confianza": 0.72, "origen": "gliner"},
-  {"tipo": "peso en kg",   "texto": "80",          "confianza": 0.65, "origen": "gliner"}
-]
-```
+El sistema implementa una lógica de negocio estricta para asegurar la rentabilidad del entrenador:
+- **Ciclos de 3 meses**: Los pagos se renuevan automáticamente cada 90 días.
+- **Avisos al iniciar**: Al abrir la app, se detectan atletas con pagos vencidos y se pregunta al entrenador si han pagado.
+- **Gestión de Inactivos**: Si un atleta no paga, es movido a la lista de inactivos automáticamente.
+- **Reactivación**: Al reactivar a un atleta, se le asigna una nueva fecha de comienzo y el ciclo de 3 meses se reinicia.
 
 ---
 
-## Tests
+## Ayuda y Guía de Uso
 
-La suite se encuentra en `tests/test_ia_service.py` y cubre **131 casos** organizados en las siguientes clases:
-
-| Clase | Qué cubre |
-|---|---|
-| `TestNormalizacion` | `_quitar_acentos`, `_normalizar_texto_base`, `_normalizar_clave_abrev` |
-| `TestExpansorAbreviaturas` | Expansión correcta, especificidad, casos borde, diagnóstico |
-| `TestDeteccionTabla` | Heurística `_es_tabla` con texto tabular, libre y mixto |
-| `TestMetadatos` | `_extraer_metadatos` en varios formatos y casos vacíos |
-| `TestParserSerie` | `_parsear_serie`: formatos válidos, coma decimal, malformados |
-| `TestNormalizarNombreEjercicio` | Expansión + capitalización, cadenas vacías |
-| `TestSplitColumnas` | Split por tabs y espacio doble |
-| `TestParserTabular` | Parser completo con fixtures de OCR real |
-| `TestGlinerServicePublico` | Métodos públicos sin cargar modelo |
-| `TestPreprocesadorTextoLibre` | Conversión NxPESO, segundos, p/mano |
-| `TestGlinerServiceIntegracion` | Flujo completo con texto tabular real |
-| `TestGlinerServiceModelo` | Tests con modelo neuronal real (`pytest.mark.slow`) |
-| `TestExtremeOcrCases` | Casos de estrés extremo: acrónimos, truncamientos y ruido OCR |
-
-### Ejecutar los tests
-
-```bash
-# Rápido — sin cargar el modelo GLiNER (unos 18s)
-.venv\Scripts\python -m pytest tests/test_ia_service.py -m "not slow" -v
-
-# Completo — incluye tests con el modelo neuronal
-.venv\Scripts\python -m pytest tests/test_ia_service.py -v
-```
-
-> Los tests marcados con `@pytest.mark.slow` requieren que el modelo GLiNER esté descargado en `modelos_ia/` o que haya conexión a internet.
-
-### Inspección manual
-
-Para ejecutar una inspección visual formateada del modelo con datos reales:
-
-```bash
-python scratch_test_gliner.py
-```
-
----
-
-## Logs
-
-Los logs se guardan en `logs/entrenador_app.log` con rotación automática:
-
-| Destino | Nivel | Detalles |
-|---|---|---|
-| Consola | `INFO` y superior | — |
-| Archivo | `DEBUG` y superior | Máx. 5 MB x 5 archivos de backup |
-
-**Formato:** `YYYY-MM-DD HH:MM:SS - LEVEL - [modulo:linea] - Mensaje`
-
----
-
-## Solución de problemas
-
-| Problema | Causa probable | Solución |
-|---|---|---|
-| No se detectan ejercicios en fotos | Tesseract no instalado o no en PATH | Instalar Tesseract y verificar con `tesseract --version` en consola |
-| `ModuleNotFoundError` al arrancar | Entorno virtual no activado | Ejecutar `.venv\Scripts\activate` antes de `python main.py` |
-| La IA tarda mucho la primera vez | El modelo GLiNER se está descargando | Esperar a que finalice (unos 200 MB) |
-| Caracteres extraños en el OCR | Baja resolución de imagen | Tomar la foto con buena luz y mayor nitidez |
-
----
-
-## Notas de desarrollo
-
-- Los modelos HuggingFace se descargan en `modelos_ia/` gracias a `HF_HOME`. Esta carpeta no se sube al repositorio (ver `.gitignore`).
-- El singleton `GlinerService._modelo` no es thread-safe en la carga inicial. Pre-cargarlo con `GlinerService(cargar_modelo_al_inicio=True)` al arrancar la app evita problemas de concurrencia.
-- `IAFormService` comparte el singleton del modelo con `GlinerService`, por lo que no recarga los ~200 MB en cada formulario guardado.
-- El sistema incluye una lógica de deduplicación final que prefiere el ejercicio más largo y específico en caso de solapamiento (por ejemplo, prefiere `"Sentadilla Búlgara"` frente a `"Sentadilla"`).
+Para facilitar el uso a personas no familiarizadas con la tecnología:
+- **Heurísticas de Nielsen**: El diseño previene errores, ofrece visibilidad del estado del sistema y permite una navegación intuitiva.
+- **Ayuda Contextual**: Todas las pantallas tienen un botón **"?"** que abre una ventana grande con instrucciones paso a paso en lenguaje sencillo.
+- **Manual Simplificado**: Consulta el archivo `GUIA_DE_USO.md` para una explicación detallada escrita para "todos los públicos".
