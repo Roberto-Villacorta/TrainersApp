@@ -1,10 +1,10 @@
-# 📔 Guía de Uso: TrainersApp (Para que todos lo entiendan)
+# Guía de Uso: TrainersApp (Para que todos lo entiendan)
 
 ¡Hola! Esta es una guía muy sencilla para que aprendas a usar el programa de entrenamiento. No hace falta saber nada de informática, solo seguir estos pasos.
 
 ---
 
-## 🏠 1. El Panel Principal (Dashboard)
+## 1. El Panel Principal (Dashboard)
 Cuando abres el programa, es lo primero que ves. 
 - Te dice cuántos alumnos tienes ahora mismo ("Atletas Activos").
 - Te avisa si alguno se ha olvidado de pagarte.
@@ -12,7 +12,7 @@ Cuando abres el programa, es lo primero que ves.
 
 ---
 
-## 👥 2. Tus Alumnos (Sección Atletas)
+## 2. Tus Alumnos (Sección Atletas)
 Aquí tienes la lista de todas las personas a las que entrenas.
 - **Para añadir a alguien nuevo**: Pulsa el botón azul que dice "+ Nuevo Atleta". Pon su nombre y su foto si quieres.
 - **Para ver su ficha**: Pulsa sobre el nombre de la persona. Ahí verás sus progresos y sus entrenamientos pasados.
@@ -20,7 +20,7 @@ Aquí tienes la lista de todas las personas a las que entrenas.
 
 ---
 
-## 🏋️ 3. Anotar un Entrenamiento (Carga Manual)
+## 3. Anotar un Entrenamiento (Carga Manual)
 Si tu alumno ha entrenado hoy y quieres apuntar lo que ha hecho:
 1. Elige su nombre en la lista de arriba.
 2. Pon en qué semana está (ej: Semana 1).
@@ -30,7 +30,7 @@ Si tu alumno ha entrenado hoy y quieres apuntar lo que ha hecho:
 
 ---
 
-## 📸 4. Escanear la Libreta (Inteligencia Artificial)
+## 4. Escanear la Libreta (Inteligencia Artificial)
 Si tu alumno escribe sus ejercicios en una libreta de papel, ¡el programa puede leerlo solo! (Solo si tienes un ordenador muy potente).
 1. Haz una foto a la hoja de la libreta con tu móvil y pásala al ordenador.
 2. Selecciona al alumno y sube la foto.
@@ -39,7 +39,7 @@ Si tu alumno escribe sus ejercicios en una libreta de papel, ¡el programa puede
 
 ---
 
-## 💰 5. Control de Pagos
+## 5. Control de Pagos
 El programa te ayuda a que no se te pase cobrar a nadie.
 - Cada vez que abras el programa, si a alguien le toca pagar ese día, te saldrá un aviso.
 - Si te dice que **SÍ** ha pagado, el programa le dejará seguir entrenando 3 meses más.
@@ -47,7 +47,5 @@ El programa te ayuda a que no se te pase cobrar a nadie.
 
 ---
 
-## ❓ ¿Tienes dudas?
+## ¿Tienes dudas?
 En casi todas las pantallas verás un botón con un **signo de interrogación (?)**. Si lo pulsas, te explicará exactamente qué puedes hacer en esa pantalla con letras grandes y claras.
-
-¡A entrenar! 💪
