@@ -17,13 +17,13 @@ class ListadoAtletas(ctk.CTkFrame):
         self.frame_botones = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_botones.pack(side="top", fill="x", pady=(10, 20), padx=20)
         
-        self.btn_registrar = ctk.CTkButton(self.frame_botones, text="+ Registrar Atleta", command=self.abrir_registro)
+        self.btn_registrar = ctk.CTkButton(self.frame_botones, text="+ Nuevo Atleta", command=self.abrir_registro)
         self.btn_registrar.pack(side="left", padx=(0, 10))
         
-        self.btn_actualizar = ctk.CTkButton(self.frame_botones, text="Actualizar Atleta", command=self.abrir_actualizar)
+        self.btn_actualizar = ctk.CTkButton(self.frame_botones, text="Editar Atleta", command=self.abrir_actualizar)
         self.btn_actualizar.pack(side="left", padx=10)
         
-        self.btn_borrar = ctk.CTkButton(self.frame_botones, text="Borrar Atleta", fg_color="#c25757", hover_color="#a14242", command=self.abrir_borrar)
+        self.btn_borrar = ctk.CTkButton(self.frame_botones, text="Baja de Atleta", fg_color="#c25757", hover_color="#a14242", command=self.abrir_borrar)
         self.btn_borrar.pack(side="left", padx=10)
         
         self.viendo_inactivos = False
@@ -59,11 +59,11 @@ class ListadoAtletas(ctk.CTkFrame):
     def mostrar_ayuda(self):
         from tkinter import messagebox
         msg = ("Gestión de Atletas:\n\n"
-               "- Registrar Atleta: Añade un nuevo cliente al sistema.\n"
-               "- Actualizar/Borrar: Modifica o elimina datos de atletas existentes.\n"
+               "- Nuevo Atleta: Añade un nuevo cliente al sistema.\n"
+               "- Editar/Baja: Modifica o elimina datos de atletas existentes.\n"
                "- Ver Inactivos: Alterna entre clientes activos y los que ya no están en el programa.\n"
-               "- Ver Ficha: Haz clic sobre cualquier tarjeta de atleta para abrir su perfil detallado.")
-        messagebox.showinfo("Ayuda: Listado de Atletas", msg)
+               "- Ver Ficha: Haz clic sobre cualquier tarjeta para abrir su perfil detallado.")
+        messagebox.showinfo("Ayuda: Atletas", msg)
 
     def obtener_atletas_activos(self):
         with SessionLocal() as session:
@@ -129,7 +129,7 @@ class ListadoAtletas(ctk.CTkFrame):
             widget.destroy()
 
         if not datos:
-            msg = "No hay atletas inactivos." if self.viendo_inactivos else "No hay atletas activos. ¡Registra tu primer cliente!"
+            msg = "No hay atletas inactivos." if self.viendo_inactivos else "No hay atletas activos todavía. ¡Añade a tu primer atleta!"
             ctk.CTkLabel(self.frame_lista, text=msg, font=ctk.CTkFont(size=16)).pack(pady=40)
             return
 
@@ -148,8 +148,8 @@ class ListadoAtletas(ctk.CTkFrame):
             lbl_nombre = ctk.CTkLabel(frame_nombres, text=atleta["nombre"], font=ctk.CTkFont(size=18, weight="bold"))
             lbl_nombre.pack(anchor="w")
 
-            str_fecha = atleta["fecha_comienzo"].strftime('%d/%m/%Y') if atleta["fecha_comienzo"] else "Sin asignar"
-            lbl_fecha = ctk.CTkLabel(frame_nombres, text=f"Comienzo del proceso: {str_fecha}", text_color="gray")
+            str_fecha = atleta["fecha_comienzo"].strftime('%d/%m/%Y') if atleta["fecha_comienzo"] else "Sin fecha"
+            lbl_fecha = ctk.CTkLabel(frame_nombres, text=f"Empezó el: {str_fecha}", text_color="gray")
             lbl_fecha.pack(anchor="w")
 
             if self.viendo_inactivos:
@@ -160,10 +160,13 @@ class ListadoAtletas(ctk.CTkFrame):
                 )
                 switch.pack(side="right", padx=20)
 
-            def abrir_ficha(evento, id_atleta=atleta["id"]):
-                app = self.winfo_toplevel()
-                if hasattr(app, "mostrar_ficha_atleta"):
-                    app.mostrar_ficha_atleta(id_atleta)
+            def abrir_ficha_evento(evento, id_atleta=atleta["id"]):
+                self.abrir_ficha_atleta(id_atleta)
 
             for widget in (card, lbl_img, frame_nombres, lbl_nombre, lbl_fecha):
-                widget.bind("<Button-1>", abrir_ficha)
+                widget.bind("<Button-1>", abrir_ficha_evento)
+
+    def abrir_ficha_atleta(self, id_atleta):
+        app = self.winfo_toplevel()
+        if hasattr(app, "mostrar_ficha_atleta"):
+            app.mostrar_ficha_atleta(id_atleta)

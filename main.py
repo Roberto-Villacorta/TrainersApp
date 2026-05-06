@@ -5,6 +5,7 @@ from pantallas.dashboard import Dashboard
 from pantallas.listado_atletas import ListadoAtletas
 from pantallas.carga_rutinas import CargaRutinas
 from pantallas.ficha_atleta import FichaAtleta
+from pantallas.sesion_manual import SesionManual
 
 
 class MainApp(ctk.CTk):
@@ -32,21 +33,28 @@ class MainApp(ctk.CTk):
         self.frame_cabecera.pack(side="top", fill="x")
 
         self.btn_dashboard = ctk.CTkButton(
-            self.frame_cabecera, text="Dashboard",
+            self.frame_cabecera, text="Inicio",
             fg_color="transparent", text_color=("black", "white"),
             command=lambda: self.mostrar_pantalla("dashboard")
         )
         self.btn_dashboard.pack(side="left", padx=10, pady=10)
 
         self.btn_atletas = ctk.CTkButton(
-            self.frame_cabecera, text="Listado de Atletas",
+            self.frame_cabecera, text="Atletas",
             fg_color="transparent", text_color=("black", "white"),
             command=lambda: self.mostrar_pantalla("atletas")
         )
         self.btn_atletas.pack(side="left", padx=10, pady=10)
 
+        self.btn_manual = ctk.CTkButton(
+            self.frame_cabecera, text="Añadir Entrenamiento",
+            fg_color="transparent", text_color=("black", "white"),
+            command=lambda: self.mostrar_pantalla("manual")
+        )
+        self.btn_manual.pack(side="left", padx=10, pady=10)
+
         self.btn_archivos = ctk.CTkButton(
-            self.frame_cabecera, text="Carga de Archivos",
+            self.frame_cabecera, text="Escanear Libreta (IA)",
             fg_color="transparent", text_color=("black", "white"),
             command=lambda: self.mostrar_pantalla("archivos")
         )
@@ -62,6 +70,7 @@ class MainApp(ctk.CTk):
         self.pantallas = {}
         self.pantallas["dashboard"]    = Dashboard(self.contenedor_principal)
         self.pantallas["atletas"]      = ListadoAtletas(self.contenedor_principal, fg_color="transparent")
+        self.pantallas["manual"]       = SesionManual(self.contenedor_principal, fg_color="transparent")
         self.pantallas["archivos"]     = CargaRutinas(self.contenedor_principal, fg_color="transparent")
         self.pantallas["ficha_atleta"] = FichaAtleta(self.contenedor_principal, master_app=self, fg_color="transparent")
 
@@ -174,6 +183,11 @@ class MainApp(ctk.CTk):
             if hasattr(self.pantallas["archivos"], "cargar_atletas"):
                 self.pantallas["archivos"].cargar_atletas()
 
+        elif nombre_pantalla == "manual":
+            # Sincronizar el combo de atletas con los datos actuales de la BBDD
+            if hasattr(self.pantallas["manual"], "cargar_atletas"):
+                self.pantallas["manual"].cargar_atletas()
+
         elif nombre_pantalla == "ficha_atleta":
             # Si ya hay un atleta activo, refrescar por si se guardó un formulario
             # nuevo o se modificaron sus datos desde otro módulo
@@ -191,6 +205,7 @@ class MainApp(ctk.CTk):
         botones = {
             "dashboard": self.btn_dashboard,
             "atletas":   self.btn_atletas,
+            "manual":    self.btn_manual,
             "archivos":  self.btn_archivos,
         }
         for name, btn in botones.items():

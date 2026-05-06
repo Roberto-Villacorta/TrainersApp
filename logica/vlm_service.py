@@ -16,6 +16,15 @@ class VLMService:
     _lock = threading.Lock()
 
     @classmethod
+    def is_gpu_available(cls):
+        """Verifica si hay una GPU NVIDIA disponible para la IA."""
+        try:
+            import torch
+            return torch.cuda.is_available()
+        except ImportError:
+            return False
+
+    @classmethod
     def get_instance(cls):
         if cls._instance is None:
             with cls._lock:
@@ -24,11 +33,14 @@ class VLMService:
         return cls._instance
 
     def __init__(self):
-        # Inicialización diferida: el modelo no se carga hasta el primer uso
+        # Inicialización diferida
         pass
 
     def _ensure_model_loaded(self):
         """Garantiza que la IA esté lista antes de procesar."""
+        if not self.is_gpu_available():
+            raise RuntimeError("La función de IA requiere una tarjeta gráfica NVIDIA (GPU) para funcionar.")
+            
         if VLMService._model is None:
             with VLMService._lock:
                 if VLMService._model is None:
@@ -36,7 +48,7 @@ class VLMService:
 
     def _load_model(self):
         if VLMService._model is None:
-            logger.info("Iniciando el motor de inteligencia artificial local...")
+            logger.info("Iniciando el motor de inteligencia artificial local (MODO GPU EXCLUSIVO)...")
             try:
                 import torch
                 from transformers import AutoProcessor, BitsAndBytesConfig
@@ -71,10 +83,8 @@ class VLMService:
                     dtype = torch.float16
                     device_map = "auto"
                 else:
-                    device = "cpu"
-                    dtype = torch.float32
-                    device_map = None # En CPU no usamos device_map auto normalmente
-                    quantization_config = None # 4-bit solo funciona en NVIDIA/CUDA
+                    logger.error("No se detectó GPU CUDA. La IA no puede arrancar.")
+                    raise RuntimeError("La función de IA requiere una tarjeta gráfica NVIDIA (GPU) para funcionar.")
 
                 kwargs = {
                     "torch_dtype": dtype,
@@ -101,12 +111,14 @@ class VLMService:
     def _realizar_inferencia(self, image, prompt, max_tokens=500):
         """Helper interno para realizar una inferencia atómica con un prompt específico."""
         import torch
+        
         messages = [
             {
                 "role": "user",
                 "content": [{"type": "image"}, {"type": "text", "text": prompt}]
             }
         ]
+        
         input_text = VLMService._processor.apply_chat_template(messages, add_generation_prompt=True)
         inputs = VLMService._processor(text=input_text, images=[image], return_tensors="pt").to(VLMService._model.device)
         
@@ -135,21 +147,16 @@ class VLMService:
                     return json.loads(json_str)
         except Exception as e:
             logger.warning(f"No se pudo decodificar ni reparar el JSON. Error: {e}")
-            logger.debug(f"Respuesta cruda: {output_text}")
             
         return None
 
     def _reparar_json_sucio(self, s: str) -> str:
         """
-        Intenta arreglar fallos comunes de la IA en JSON como comas faltantes 
-        o comas sobrantes al final de una lista.
+        Intenta arreglar fallos comunes de la IA en JSON.
         """
         import re
-        # 1. Eliminar comas antes de cerrar llaves o corchetes: ,} -> } o ,] -> ]
         s = re.sub(r',\s*([}\]])', r'\1', s)
-        # 2. Intentar poner comas faltantes entre objetos: } { -> }, {
         s = re.sub(r'}\s*{', '}, {', s)
-        # 3. Intentar poner comas faltantes entre elementos de lista: " " -> ", "
         s = re.sub(r'"\s+"', '", "', s)
         return s
 
@@ -162,35 +169,55 @@ class VLMService:
             raise FileNotFoundError(f"Archivo no encontrado: {image_path}")
 
         try:
-            resultado = {"mesociclo": "", "semana": "", "sesion": "", "ejercicios": []}
+            # Diccionario base de extracción
+            res = {"mesociclo": "", "semana": "", "sesion": "", "ejercicios": []}
 
             # 1. Fase Cabecera (Mesociclo, Semana)
-            self._ejecutar_fase_cabecera(image_path, resultado, progress_callback)
+            self._ejecutar_fase_cabecera(image_path, res, progress_callback)
 
             # 2. Fase Tabla Completa
-            self._ejecutar_fase_tabla(image_path, resultado, progress_callback)
+            self._ejecutar_fase_tabla(image_path, res, progress_callback)
 
-            return {"success": True, "data": resultado}
+            if not res["ejercicios"]:
+                # Fallback al modo tradicional si la fase secuencial falla
+                logger.info("Modo secuencial fallido, intentando fallback...")
+                res = self.procesar_imagen_rutina(image_path)
+            
+            if not res.get("ejercicios"):
+                return {"success": False, "error": "No se detectaron ejercicios en la imagen."}
+
+            # Generar el prefijo para la UI (Meso X - Sem Y)
+            prefijo = ""
+            if res.get("mesociclo") or res.get("semana"):
+                prefijo = f"Meso {res.get('mesociclo', '?')} - Sem {res.get('semana', '?')}"
+                if res.get("sesion"): prefijo += f" - {res['sesion']}"
+
+            return {
+                "success": True, 
+                "prefijo": prefijo,
+                "data": res # Enviamos el dict completo para el cargador
+            }
 
         except Exception as e:
             logger.error(f"Error en pipeline secuencial: {e}")
-            if progress_callback: progress_callback(f"Error: {str(e)}. Reintentando modo general...")
-            return self.procesar_imagen_rutina(image_path)
+            return {"success": False, "error": str(e)}
 
     def _ejecutar_fase_cabecera(self, path, res_dict, callback):
-        """Fase 1: Recorte superior y extracción de metadatos de la sesión."""
-        if callback: callback("Analizando cabecera...")
+        """Fase 1: Recorte superior y extracción de metadatos."""
+        if callback: callback("Detectando cabecera...")
         img = ImageProcessorService.preparar_para_vlm(path, solo_cabecera=True)
-        prompt = "Identify the training cycle. Return JSON: {\"mesociclo\": \"NUMBER\", \"semana\": \"NUMBER\", \"sesion\": \"NUMBER/NAME\"}."
+        # Revertimos al prompt original que funcionaba
+        prompt = "Read header. JSON: {\"mesociclo\": \"...\", \"semana\": \"...\", \"sesion\": \"...\"}"
         data = self._realizar_inferencia(img, prompt, max_tokens=64)
         if data:
             res_dict.update(data)
         del img
 
     def _ejecutar_fase_tabla(self, path, res_dict, callback):
-        """Fase 2: Imagen completa y extracción de todos los ejercicios."""
-        if callback: callback("Analizando tabla completa de ejercicios...")
+        """Fase 2: Imagen completa y extracción de tabla."""
+        if callback: callback("Extrayendo tabla de ejercicios...")
         img = ImageProcessorService.preparar_para_vlm(path)
+        # Revertimos al prompt original que era infalible
         prompt = """Read all exercise rows in this table.
         For each exercise, extract: name, target rep range, and all sets (reps x weight).
         Ignore crossed out sets.

@@ -308,7 +308,7 @@ class FichaAtleta(ctk.CTkScrollableFrame):
             self.lbl_nombre.configure(text=atleta.nombre_completo)
 
             # Uso de MediaService para consistencia y eficiencia
-            self.imagen_cargada = MediaService.obtener_avatar_atleta(atleta)
+            self.imagen_cargada = MediaService.obtener_avatar_atleta(atleta.id, atleta.foto_perfil, atleta.nombre_completo, size=(100, 100))
             self.lbl_foto.configure(image=self.imagen_cargada)
 
         # Mostrar spinner de carga mientras se generan los gráficos en segundo plano
@@ -330,26 +330,66 @@ class FichaAtleta(ctk.CTkScrollableFrame):
                 todos_los_formularios = session.query(FormularioSemanal).filter(
                     FormularioSemanal.atleta_id == self.id_atleta_actual
                 ).order_by(FormularioSemanal.fecha_registro.desc()).all()
-                # Desvinculamos los objetos de la sesión para usarlos fuera de ella
+                
+                from bbdd.models import Rutina
+                todas_las_rutinas = session.query(Rutina).filter(
+                    Rutina.atleta_id == self.id_atleta_actual
+                ).order_by(Rutina.fecha_asignacion.desc()).all()
+                
+                # Forzar carga de ejercicios antes de expunge
+                for r in todas_las_rutinas:
+                    _ = r.ejercicios
+                
                 session.expunge_all()
             # Pintar en el hilo principal con after()
-            self.after(0, lambda: self.renderizar_graficos(todos_los_formularios))
-        except Exception:
-            self.after(0, lambda: self.renderizar_graficos([]))
+            self.after(0, lambda: self.renderizar_graficos(todos_los_formularios, todas_las_rutinas))
+        except Exception as e:
+            app_logger.error(f"Error renderizando ficha: {e}")
+            self.after(0, lambda: self.renderizar_graficos([], []))
 
-    def renderizar_graficos(self, todos_los_formularios=None):
-        """Dibuja el resumen IA, el gráfico comparativo y el historial. Debe llamarse desde el hilo principal."""
+    def renderizar_graficos(self, todos_los_formularios=None, todas_las_rutinas=None):
+        """Dibuja el resumen IA, el gráfico comparativo, las rutinas y el historial. Debe llamarse desde el hilo principal."""
         # Limpiar frame de contenido
         for widget in self.frame_contenido.winfo_children():
             widget.destroy()
 
-        if todos_los_formularios is None:
+        if todos_los_formularios is None or todas_las_rutinas is None:
             # Carga síncrona de emergencia (compatibilidad)
             with SessionLocal() as session:
                 todos_los_formularios = session.query(FormularioSemanal).filter(
                     FormularioSemanal.atleta_id == self.id_atleta_actual
                 ).order_by(FormularioSemanal.fecha_registro.desc()).all()
+                
+                from bbdd.models import Rutina
+                todas_las_rutinas = session.query(Rutina).filter(
+                    Rutina.atleta_id == self.id_atleta_actual
+                ).order_by(Rutina.fecha_asignacion.desc()).all()
+                for r in todas_las_rutinas: _ = r.ejercicios
                 session.expunge_all()
+
+        # --- SECCIÓN 1: RUTINAS / ENTRENAMIENTOS ---
+        f_rutinas = ctk.CTkFrame(self.frame_contenido, fg_color="transparent")
+        f_rutinas.pack(fill="x", pady=(0, 20))
+        ctk.CTkLabel(f_rutinas, text="Entrenamientos Guardados", font=ctk.CTkFont(size=20, weight="bold")).pack(anchor="w", pady=(0, 10))
+        
+        if not todas_las_rutinas:
+            ctk.CTkLabel(f_rutinas, text="No hay entrenamientos registrados aún.", font=ctk.CTkFont(slant="italic")).pack(anchor="w", padx=20)
+        else:
+            for rutina in todas_las_rutinas:
+                btn_rut = ctk.CTkButton(
+                    f_rutinas,
+                    text=f"📋 {rutina.nombre_rutina} ({rutina.fecha_asignacion.strftime('%d/%m/%Y')})",
+                    fg_color="#3a3a3a", hover_color="#4a4a4a", anchor="w",
+                    command=lambda r=rutina: self.ver_detalle_rutina(r)
+                )
+                btn_rut.pack(fill="x", pady=2)
+
+        # --- SECCIÓN 2: ANÁLISIS DE FORMULARIOS ---
+        ctk.CTkLabel(self.frame_contenido, text="Análisis de Progreso", font=ctk.CTkFont(size=20, weight="bold")).pack(anchor="w", pady=(20, 10))
+
+        if not todos_los_formularios:
+            ctk.CTkLabel(self.frame_contenido, text="No hay formularios registrados para este atleta aún.", font=ctk.CTkFont(size=14, slant="italic")).pack(pady=20)
+            return
 
         formularios = todos_los_formularios[:2]
 
@@ -362,10 +402,6 @@ class FichaAtleta(ctk.CTkScrollableFrame):
             f_ia = ctk.CTkFrame(self.frame_contenido, fg_color="#1d4066")
             f_ia.pack(fill="x", pady=(0, 20))
             ctk.CTkLabel(f_ia, text=f"Ultimas dudas del atleta: {formularios[0].dudas}", font=ctk.CTkFont(size=14, italic=True), text_color="white", wraplength=500).pack(pady=10, padx=10)
-
-        if not todos_los_formularios:
-            ctk.CTkLabel(self.frame_contenido, text="No hay formularios registrados para este atleta.", font=ctk.CTkFont(size=14, slant="italic")).pack(pady=40)
-            return
 
         # Análisis comparativo delegado al StatsService
         comparativa = StatsService.obtener_comparativa_formularios(todos_los_formularios)
@@ -421,6 +457,39 @@ class FichaAtleta(ctk.CTkScrollableFrame):
             )
             btn_form.pack(fill="x", pady=2)
 
+    def ver_detalle_rutina(self, rutina):
+        """Muestra un diálogo con los ejercicios de la rutina seleccionada."""
+        DialogoVerRutina(self, rutina)
+
     def volver_al_listado(self):
         if hasattr(self.master_app, "mostrar_pantalla"):
             self.master_app.mostrar_pantalla("atletas")
+
+class DialogoVerRutina(ctk.CTkToplevel):
+    def __init__(self, master, rutina):
+        super().__init__(master)
+        self.title(f"Detalle: {rutina.nombre_rutina}")
+        self.geometry("600x500")
+        
+        self.transient(master.winfo_toplevel())
+        self.after(100, self.grab_set)
+        
+        scroll = ctk.CTkScrollableFrame(self)
+        scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        ctk.CTkLabel(scroll, text=f"Fecha: {rutina.fecha_asignacion.strftime('%d/%m/%Y')}", font=ctk.CTkFont(size=12, slant="italic")).pack(anchor="w", pady=(0, 10))
+        
+        for ej in rutina.ejercicios:
+            f = ctk.CTkFrame(scroll)
+            f.pack(fill="x", pady=5, padx=5)
+            
+            ctk.CTkLabel(f, text=ej.nombre_ejercicio, font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=10, pady=(5, 0))
+            
+            # Formatear detalles
+            detalles = f"Series: {ej.series} | Reps: {ej.repeticiones}"
+            if ej.peso_objetivo: detalles += f" | Peso: {ej.peso_objetivo}"
+            if ej.tiempo_descanso: detalles += f" | Descanso: {ej.tiempo_descanso}"
+            
+            ctk.CTkLabel(f, text=detalles, font=ctk.CTkFont(size=12)).pack(anchor="w", padx=20, pady=(0, 5))
+        
+        ctk.CTkButton(self, text="Cerrar", command=self.destroy).pack(pady=10)

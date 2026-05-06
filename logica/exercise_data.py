@@ -6,41 +6,57 @@ from utils.text_utils import normalizar_texto_base
 # Catálogo de Ejercicios Canónicos
 # ─────────────────────────────────────────────────────────────────
 
-EJERCICIOS_CANONICOS: List[str] = [
-    # Pecho
-    "press plano", "press inclinado", "press declinado", "press banca",
-    "press con mancuernas", "aperturas", "aperturas con mancuernas",
-    "cruce en polea", "fondos", "peck deck", "press hammer",
-    # Espalda
-    "dominadas", "dominadas supinas", "dominadas pronas", "dominadas neutras",
-    "jalon al pecho", "jalon tras nuca", "remo", "remo con mancuernas",
-    "remo con barra", "remo en polea", "remo en t", "pullover", "tiron dominadas",
-    "remo horizontal", "remo pendlay", "remo unipolar", "lumbares",
-    "tiron al pecho", "tiron polea", "tiron", "remo", "jalon",
-    # Hombro
-    "elevaciones laterales", "elevaciones frontales", "elevaciones posteriores",
-    "vuelos laterales", "vuelos frontales", "vuelos posteriores",
-    "pajaro", "face pull", "press hombro", "press militar", "press arnold",
-    "encogimientos", "press tras nuca", "upright row", "jalon en polea",
-    # Pierna
-    "sentadilla", "sentadilla trasera", "sentadilla frontal", "sentadilla bulgara",
-    "zancadas", "prensa", "extension cuadriceps", "curl femoral",
-    "curl femoral tumbado", "curl femoral sentado", "hip thrust", "puente gluteo",
-    "abduccion", "aduccion", "gemelos", "elevaciones de gemelos",
-    "peso muerto", "peso muerto convencional", "peso muerto sumo",
-    "peso muerto rumano", "hack squat", "leg press", "step up", "glute bridge",
-    "sentadilla hack", "zancada", "elevacion de talones",
-    # Brazos
-    "curl", "curl con barra", "curl con barra z", "curl con mancuernas",
-    "curl martillo", "martillo continuo", "curl predicador", "curl concentrado",
-    "curl bayesian", "extensiones triceps", "extensiones triceps cuerda",
-    "extensiones triceps polea", "extensiones trasnuca", "press cerrado",
-    "patada triceps", "dips", "skullcrushers", "frances", "curl araña",
-    "press frances", "jalon de triceps",
-    # Core / Cardio / Otros
-    "abdominales", "crunch", "plancha", "elevaciones de piernas", "ab wheel",
-    "cinta", "bicicleta", "remo ergometro", "descanso", "burpees", "jumping jacks"
-]
+# ─────────────────────────────────────────────────────────────────
+# Catálogo de Ejercicios por Grupo Muscular
+# ─────────────────────────────────────────────────────────────────
+
+EJERCICIOS_POR_MUSCULO: Dict[str, List[str]] = {
+    "Pecho": [
+        "press plano", "press inclinado", "press declinado", "press banca",
+        "press con mancuernas", "aperturas", "aperturas con mancuernas",
+        "cruce en polea", "fondos", "peck deck", "press hammer"
+    ],
+    "Espalda": [
+        "dominadas", "dominadas supinas", "dominadas pronas", "dominadas neutras",
+        "jalon al pecho", "jalon tras nuca", "remo", "remo con mancuernas",
+        "remo con barra", "remo en polea", "remo en t", "pullover", "tiron dominadas",
+        "remo horizontal", "remo pendlay", "remo unipolar", "lumbares",
+        "tiron al pecho", "tiron polea", "tiron", "remo", "jalon"
+    ],
+    "Hombro": [
+        "elevaciones laterales", "elevaciones frontales", "elevaciones posteriores",
+        "vuelos laterales", "vuelos frontales", "vuelos posteriores",
+        "pajaro", "face pull", "press hombro", "press militar", "press arnold",
+        "encogimientos", "press tras nuca", "upright row", "jalon en polea"
+    ],
+    "Pierna": [
+        "sentadilla", "sentadilla trasera", "sentadilla frontal", "sentadilla bulgara",
+        "zancadas", "prensa", "extension cuadriceps", "curl femoral",
+        "curl femoral tumbado", "curl femoral sentado", "hip thrust", "puente gluteo",
+        "abduccion", "aduccion", "gemelos", "elevaciones de gemelos",
+        "peso muerto", "peso muerto convencional", "peso muerto sumo",
+        "peso muerto rumano", "hack squat", "leg press", "step up", "glute bridge",
+        "sentadilla hack", "zancada", "elevacion de talones"
+    ],
+    "Brazos": [
+        "curl", "curl con barra", "curl con barra z", "curl con mancuernas",
+        "curl martillo", "martillo continuo", "curl predicador", "curl concentrado",
+        "curl bayesian", "extensiones triceps", "extensiones triceps cuerda",
+        "extensiones triceps polea", "extensiones trasnuca", "press cerrado",
+        "patada triceps", "dips", "skullcrushers", "frances", "curl araña",
+        "press frances", "jalon de triceps"
+    ],
+    "Core / Otros": [
+        "abdominales", "crunch", "plancha", "elevaciones de piernas", "ab wheel",
+        "descanso", "burpees", "jumping jacks"
+    ],
+    "Cardio": [
+        "cinta", "bicicleta", "remo ergometro", "eliptica", "natacion", "correr"
+    ]
+}
+
+# Lista plana para compatibilidad con el Mapper
+EJERCICIOS_CANONICOS: List[str] = [item for sublist in EJERCICIOS_POR_MUSCULO.values() for item in sublist]
 
 # ─────────────────────────────────────────────────────────────────
 # DICCIONARIO DE ABREVIATURAS

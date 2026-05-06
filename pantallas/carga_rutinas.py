@@ -7,6 +7,7 @@ from datetime import datetime
 from bbdd.database import SessionLocal
 from logica.atletas_service import AtletasService
 from logica.rutinas_service import RutinasService
+from logica.vlm_service import VLMService
 from utils.logger import app_logger
 
 class CargaRutinas(ctk.CTkScrollableFrame):
@@ -24,12 +25,18 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.cola_ui = queue.Queue()
         self.verificar_cola_ui()
         
-        # Título
-        self.lbl_titulo = ctk.CTkLabel(self, text="Digitalizador de Rutinas Pro", font=ctk.CTkFont(size=28, weight="bold"))
+        self.lbl_titulo = ctk.CTkLabel(self, text="Escanear Libreta de Entrenamiento", font=ctk.CTkFont(size=28, weight="bold"))
         self.lbl_titulo.grid(row=0, column=0, pady=(20, 10), padx=30, sticky="w")
         
-        self.lbl_subtitulo = ctk.CTkLabel(self, text="Sube fotos de tus libretas y la IA extraerá los datos automáticamente.", font=ctk.CTkFont(size=16))
+        self.lbl_subtitulo = ctk.CTkLabel(self, text="Sube fotos de la libreta de tu atleta y el programa leerá los datos.", font=ctk.CTkFont(size=16))
         self.lbl_subtitulo.grid(row=1, column=0, pady=(0, 20), padx=30, sticky="w")
+        
+        # Verificación de GPU (Nielsen: Error Prevention)
+        self.gpu_disponible = VLMService.is_gpu_available()
+        if not self.gpu_disponible:
+            self.lbl_no_gpu = ctk.CTkLabel(self, text="⚠️ FUNCIÓN DESACTIVADA: Se requiere una tarjeta gráfica NVIDIA (GPU) para usar la IA.", 
+                                          text_color="#c25757", font=ctk.CTkFont(weight="bold"))
+            self.lbl_no_gpu.grid(row=2, column=0, pady=5, padx=30, sticky="w")
 
         # --- SECCIÓN 1: SELECCIÓN DE ATLETA Y ARCHIVO ---
         self.frame_controles = ctk.CTkFrame(self)
@@ -37,7 +44,7 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.frame_controles.grid_columnconfigure((0, 1), weight=1)
 
         # Selección de Atleta
-        self.lbl_atleta = ctk.CTkLabel(self.frame_controles, text="1. Selecciona el Atleta:", font=ctk.CTkFont(weight="bold"))
+        self.lbl_atleta = ctk.CTkLabel(self.frame_controles, text="1. Selecciona al Atleta:", font=ctk.CTkFont(weight="bold"))
         self.lbl_atleta.grid(row=0, column=0, padx=20, pady=(15, 5), sticky="w")
         
         self.combo_atletas = ctk.CTkComboBox(self.frame_controles, values=["Cargando atletas..."], width=300)
@@ -63,10 +70,14 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.btn_help.grid(row=0, column=2, padx=20, pady=15, sticky="e")
 
         # --- SECCIÓN 2: ACCIÓN DE PROCESADO ---
-        self.btn_procesar = ctk.CTkButton(self, text="PROCESAR CON IA", font=ctk.CTkFont(size=18, weight="bold"),
+        self.btn_procesar = ctk.CTkButton(self, text="ANALIZAR FOTO", font=ctk.CTkFont(size=18, weight="bold"),
                                           height=50, command=self.iniciar_procesamiento,
-                                          state="disabled", fg_color="#2e8c4a", hover_color="#1b5e20")
+                                          state="disabled" if not self.gpu_disponible else "disabled", 
+                                          fg_color="#2e8c4a", hover_color="#1b5e20")
         self.btn_procesar.grid(row=3, column=0, padx=30, pady=20, sticky="ew")
+        
+        if not self.gpu_disponible:
+            self.btn_procesar.configure(text="IA DESACTIVADA (SIN GPU)")
 
         # --- SECCIÓN 3: RESULTADOS Y PREVISUALIZACIÓN ---
         self.frame_resultados = ctk.CTkFrame(self)
@@ -78,18 +89,18 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         
         self.txt_preview = ctk.CTkTextbox(self.frame_resultados, height=350, font=ctk.CTkFont(family="Consolas", size=13))
         self.txt_preview.pack(fill="both", expand=True, padx=20, pady=10)
-        self.txt_preview.insert("0.0", "Los resultados aparecerán aquí. Podrás editarlos antes de guardar.")
+        self.txt_preview.insert("0.0", "Los resultados aparecerán aquí. Podrás corregirlos si falta algo.")
         self.txt_preview.configure(state="disabled")
 
         # --- SECCIÓN 4: GUARDAR Y EXPORTAR ---
         self.frame_acciones = ctk.CTkFrame(self, fg_color="transparent")
         self.frame_acciones.grid(row=5, column=0, padx=30, pady=20, sticky="e")
         
-        self.btn_exportar = ctk.CTkButton(self.frame_acciones, text="Exportar a Excel", state="disabled", 
+        self.btn_exportar = ctk.CTkButton(self.frame_acciones, text="Guardar en Excel", state="disabled", 
                                           command=self.exportar_excel, fg_color="#a06917", hover_color="#8c5607")
         self.btn_exportar.pack(side="left", padx=10)
         
-        self.btn_guardar = ctk.CTkButton(self.frame_acciones, text="Guardar en Base de Datos", state="disabled",
+        self.btn_guardar = ctk.CTkButton(self.frame_acciones, text="Guardar en el Programa", state="disabled",
                                          command=self.confirmar_guardado)
         self.btn_guardar.pack(side="left", padx=10)
 
@@ -107,11 +118,12 @@ class CargaRutinas(ctk.CTkScrollableFrame):
 
     def mostrar_ayuda(self):
         from tkinter import messagebox
-        msg = ("Carga de Rutinas:\n\n"
+        msg = ("Escanear Libreta:\n\n"
                "- Selecciona un atleta y una o varias fotos.\n"
-               "- Pulsa 'Procesar con IA'.\n"
-               "- Cada foto se evalua de forma independiente.\n"
-               "- Revisa los resultados y guardalos en la base de datos.")
+               "- Pulsa 'Analizar Foto'.\n"
+               "- El programa leerá el texto por ti.\n"
+               "- Revisa que todo esté bien y guárdalo.\n\n"
+               "Nota: Esta función requiere una GPU NVIDIA para funcionar.")
         messagebox.showinfo("Ayuda", msg)
 
     def cargar_atletas(self):
@@ -137,7 +149,8 @@ class CargaRutinas(ctk.CTkScrollableFrame):
             self.archivos_seleccionados = list(file_paths)
             cant = len(self.archivos_seleccionados)
             self.lbl_status_file.configure(text=f"{cant} archivos seleccionados", text_color="white")
-            self.btn_procesar.configure(state="normal")
+            if self.gpu_disponible:
+                self.btn_procesar.configure(state="normal")
 
     def iniciar_procesamiento(self):
         atleta_str = self.combo_atletas.get()
@@ -151,7 +164,7 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.btn_procesar.configure(state="disabled", text="Analizando fotos...")
         self.txt_preview.configure(state="normal")
         self.txt_preview.delete("0.0", "end")
-        self.txt_preview.insert("0.0", f"Iniciando el analisis de {len(self.archivos_seleccionados)} fotos...\nLeyendo libreta, por favor espere.\n")
+        self.txt_preview.insert("0.0", f"Leyendo las {len(self.archivos_seleccionados)} fotos...\nPor favor, espera un momento.\n")
         self.txt_preview.configure(state="disabled")
         
         # Lanzar en hilo para no congelar la UI
@@ -160,32 +173,35 @@ class CargaRutinas(ctk.CTkScrollableFrame):
     def ejecutar_pipeline_multiple(self, atleta_id):
         try:
             self.resultados_por_imagen = []
-            self.ejercicios_procesados = []
             
             with SessionLocal() as session:
                 service = RutinasService(session)
                 
                 for i, path in enumerate(self.archivos_seleccionados, 1):
                     nombre_foto = os.path.basename(path)
-                    self.actualizar_status_progreso(f"\nIMAGEN {i}/{len(self.archivos_seleccionados)}: {nombre_foto}")
-                    self.actualizar_status_progreso("-" * 30)
+                    msg_prefix = f"[Imagen {i}/{len(self.archivos_seleccionados)}]"
                     
-                    # Llamada secuencial con callback
+                    self.actualizar_status_progreso(f"\n{msg_prefix} Analizando: {nombre_foto}")
+                    
+                    # Callback local con prefijo
+                    def callback_vlm(m):
+                        self.actualizar_status_progreso(f"{msg_prefix} {m}")
+
                     resultado = service.procesar_imagen_vlm_secuencial(
                         path, 
-                        progress_callback=self.actualizar_status_progreso
+                        progress_callback=callback_vlm
                     )
                     
                     if resultado.get("success"):
                         res_item = {
                             "archivo": nombre_foto,
                             "prefijo": resultado.get("prefijo", ""),
-                            "ejercicios": resultado["data"]
+                            "ejercicios": resultado["data"]["ejercicios"]
                         }
                         self.resultados_por_imagen.append(res_item)
                     else:
                         error_msg = resultado.get('error', 'Error desconocido')
-                        self.actualizar_status_progreso(f"Fallo en {nombre_foto}: {error_msg}")
+                        self.actualizar_status_progreso(f"{msg_prefix} Fallo: {error_msg}")
                 
                 if not self.resultados_por_imagen:
                     self.finalizar_con_error("No se han podido detectar ejercicios.")
@@ -204,14 +220,14 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         self.cola_ui.put(lambda: self.txt_preview.configure(state="disabled"))
 
     def finalizar_con_error(self, error):
-        self.cola_ui.put(lambda: messagebox.showerror("Atencion", error))
-        self.cola_ui.put(lambda: self.btn_procesar.configure(state="normal", text="PROCESAR CON IA"))
+        self.cola_ui.put(lambda: messagebox.showerror("Atención", error))
+        self.cola_ui.put(lambda: self.btn_procesar.configure(state="normal", text="ANALIZAR FOTO"))
 
     def mostrar_previsualizacion_multiple(self):
         self.cola_ui.put(lambda: self.txt_preview.configure(state="normal"))
         self.cola_ui.put(lambda: self.txt_preview.delete("0.0", "end"))
         
-        previa = "RESUMEN DE DIGITALIZACION\n"
+        previa = "RESUMEN DE LA LIBRETA\n"
         previa += "="*30 + "\n\n"
         
         for item in self.resultados_por_imagen:
@@ -232,7 +248,7 @@ class CargaRutinas(ctk.CTkScrollableFrame):
         
         # Habilitar botones de acción y PERMITIR EDICION
         self.cola_ui.put(lambda: self.txt_preview.configure(state="normal"))
-        self.cola_ui.put(lambda: self.btn_procesar.configure(state="normal", text="RE-PROCESAR"))
+        self.cola_ui.put(lambda: self.btn_procesar.configure(state="normal", text="VOLVER A ANALIZAR"))
         self.cola_ui.put(lambda: self.btn_guardar.configure(state="normal"))
         self.cola_ui.put(lambda: self.btn_exportar.configure(state="normal"))
 

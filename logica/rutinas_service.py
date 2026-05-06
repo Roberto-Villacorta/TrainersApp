@@ -50,8 +50,8 @@ class RutinasService:
             
             nombre_generado = []
             if meso: nombre_generado.append(f"Meso {meso}")
-            if sem: nombre_generado.append(f"Sem {sem}")
-            if ses: nombre_generado.append(f"Ses {ses}")
+            if sem: nombre_generado.append(f"Semana {sem}")
+            if ses: nombre_generado.append(f"Sesión {ses}")
             
             prefijo = " - ".join(nombre_generado)
             
@@ -96,8 +96,8 @@ class RutinasService:
             ses = vlm_data.get("sesion", "")
             nombre_gen = []
             if meso: nombre_gen.append(f"Meso {meso}")
-            if sem: nombre_gen.append(f"Sem {sem}")
-            if ses: nombre_gen.append(f"Ses {ses}")
+            if sem: nombre_gen.append(f"Semana {sem}")
+            if ses: nombre_gen.append(f"Sesión {ses}")
             prefijo = " - ".join(nombre_gen)
             
             return {
