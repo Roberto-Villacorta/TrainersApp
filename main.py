@@ -5,6 +5,7 @@ from pantallas.dashboard import Dashboard
 from pantallas.listado_atletas import ListadoAtletas
 from pantallas.carga_rutinas import CargaRutinas
 from pantallas.ficha_atleta import FichaAtleta
+from utils.dialogo_calendario import DialogoSeleccionarFecha
 from pantallas.sesion_manual import SesionManual
 
 
@@ -87,27 +88,43 @@ class MainApp(ctk.CTk):
             from bbdd.database import SessionLocal
             from logica.atletas_service import AtletasService
             from tkinter import messagebox
+            import datetime
             
-            with SessionLocal() as session:
-                service = AtletasService(session)
-                vencidas = service.obtener_suscripciones_vencidas()
+            session = SessionLocal()
+            service = AtletasService(session)
+            vencidas = service.obtener_suscripciones_vencidas()
+            
+            def procesar_siguiente(index):
+                if index >= len(vencidas):
+                    session.close()
+                    # Al finalizar todo, refrescar dashboard
+                    if self.pantalla_actual == "dashboard":
+                        self.pantallas["dashboard"].actualizar_dashboard()
+                    return
                 
-                for sub in vencidas:
-                    atleta = sub.atleta
-                    pregunta = f"¿El atleta {atleta.nombre_completo} ha pagado la renovación?\n\n(Fecha límite era: {sub.fecha_renovacion.strftime('%d/%m/%Y')})"
+                sub = vencidas[index]
+                atleta = sub.atleta
+                pregunta = f"¿El atleta {atleta.nombre_completo} ha pagado la renovación?\n\n(Fecha límite era: {sub.fecha_renovacion.strftime('%d/%m/%Y')})"
+                
+                if messagebox.askyesno("Cobro de Suscripción", pregunta):
+                    # Si ha pagado, preguntamos DESDE QUÉ FECHA empieza este nuevo periodo
+                    def al_seleccionar_fecha(fecha_pago):
+                        # Actualizamos la fecha de renovación a 3 meses de la fecha de pago elegida
+                        nueva_fecha = fecha_pago + datetime.timedelta(days=90)
+                        sub.fecha_renovacion = nueva_fecha
+                        session.commit()
+                        messagebox.showinfo("Pago Registrado", f"Suscripción de {atleta.nombre_completo} renovada hasta {nueva_fecha.strftime('%d/%m/%Y')}.")
+                        procesar_siguiente(index + 1)
                     
-                    if messagebox.askyesno("Cobro de Suscripción", pregunta):
-                        service.registrar_pago(sub.id)
-                        messagebox.showinfo("Pago Registrado", f"Suscripción de {atleta.nombre_completo} renovada por 3 meses más.")
-                    else:
-                        service.cambiar_estado(atleta.id, "inactivo")
-                        messagebox.showwarning("Atleta Desactivado", f"El atleta {atleta.nombre_completo} ha sido marcado como INACTIVO por falta de pago.")
-            
-            # Si se desactivaron atletas, refrescar la lista o el dashboard si están abiertos
-            if self.pantalla_actual == "atletas":
-                self.pantallas["atletas"].renderizar_lista()
-            elif self.pantalla_actual == "dashboard":
-                self.pantallas["dashboard"].actualizar_dashboard()
+                    # Lanzar calendario
+                    DialogoSeleccionarFecha(self, al_seleccionar_fecha, fecha_inicial=sub.fecha_renovacion)
+                else:
+                    # Si no ha pagado, desactivar
+                    service.cambiar_estado(atleta.id, "inactivo")
+                    messagebox.showwarning("Atleta Desactivado", f"El atleta {atleta.nombre_completo} ha sido marcado como INACTIVO por falta de pago.")
+                    procesar_siguiente(index + 1)
+
+            procesar_siguiente(0)
                 
         except Exception as e:
             print(f"Error verificando pagos: {e}")

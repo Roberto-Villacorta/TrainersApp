@@ -75,17 +75,20 @@ class AtletasService:
         self.session.commit()
         return True
 
-    def cambiar_estado(self, atleta_id, nuevo_estado="inactivo"):
+    def cambiar_estado(self, atleta_id, nuevo_estado="inactivo", fecha_comienzo=None):
         atleta = self.obtener_atleta_por_id(atleta_id)
         if atleta:
             atleta.estado = nuevo_estado
             if nuevo_estado == "activo":
-                # Al reactivar, se pone la renovación a 3 meses de hoy
+                # Al reactivar, se usa la fecha proporcionada o hoy
                 hoy = datetime.today().date()
+                inicio = fecha_comienzo if fecha_comienzo else hoy
+                atleta.fecha_comienzo = inicio
+                
                 self.session.query(Suscripcion).filter(Suscripcion.atleta_id == atleta_id).delete()
                 nueva_sub = Suscripcion(
                     atleta_id=atleta_id,
-                    fecha_renovacion=hoy + timedelta(days=90),
+                    fecha_renovacion=inicio + timedelta(days=90),
                     estado="pendiente"
                 )
                 self.session.add(nueva_sub)

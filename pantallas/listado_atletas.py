@@ -8,6 +8,8 @@ from bbdd.database import SessionLocal
 from logica.atletas_service import AtletasService
 from logica.media_service import MediaService
 from utils.dialogos_atletas import DialogoRegistrarAtleta, DialogoActualizarAtleta, DialogoBorrarAtleta
+from utils.dialogo_calendario import DialogoSeleccionarFecha
+from tkinter import messagebox
 
 class ListadoAtletas(ctk.CTkFrame):
     def __init__(self, master, **kwargs):
@@ -173,10 +175,26 @@ class ListadoAtletas(ctk.CTkFrame):
 
     def alternar_estado_atleta(self, id_atleta, nuevo_estado):
         """Cambia el estado de un atleta y refresca la lista."""
-        try:
-            with SessionLocal() as session:
-                service = AtletasService(session)
-                if service.cambiar_estado(id_atleta, nuevo_estado):
-                    self.renderizar_lista()
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo cambiar el estado: {e}")
+        if nuevo_estado == "activo":
+            # Si vamos a activar, preguntamos la fecha de inicio
+            def realizar_activacion(fecha_seleccionada):
+                try:
+                    with SessionLocal() as session:
+                        service = AtletasService(session)
+                        if service.cambiar_estado(id_atleta, "activo", fecha_comienzo=fecha_seleccionada):
+                            self.renderizar_lista()
+                            messagebox.showinfo("¡Hecho!", f"Atleta reactivado. Próximo pago: {(fecha_seleccionada + datetime.timedelta(days=90)).strftime('%d/%m/%Y')}")
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo cambiar el estado: {e}")
+
+            import datetime # Para el mensaje de info
+            DialogoSeleccionarFecha(self, realizar_activacion)
+        else:
+            # Si vamos a desactivar, lo hacemos directamente
+            try:
+                with SessionLocal() as session:
+                    service = AtletasService(session)
+                    if service.cambiar_estado(id_atleta, nuevo_estado):
+                        self.renderizar_lista()
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo cambiar el estado: {e}")
