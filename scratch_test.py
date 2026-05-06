@@ -1,20 +1,16 @@
-import sys
-import traceback
-import pytesseract
-sys.path.append(r'c:\Users\fitne\Desktop\Folder 2\TrainersApp')
+import tkinter as tk
+import threading
+import time
 
-def test():
+def worker(root):
+    time.sleep(1)
+    print("Worker trying to call after...")
     try:
-        from logica.procesador_ocr import OCRProcessor
-        from logica.ia_service import GlinerService
-        import json
-        
-        # We don't have the user's image path, but we can call the method with an invalid path
-        # Actually, let's see if pytesseract.Output is available
-        print("pytesseract.Output:", getattr(pytesseract, 'Output', 'NOT FOUND'))
-        
+        root.after(0, lambda: print("After executed!"))
     except Exception as e:
-        print("Error:")
-        traceback.print_exc()
+        print("Error:", repr(e))
+    print("Worker done.")
 
-test()
+root = tk.Tk()
+threading.Thread(target=worker, args=(root,), daemon=True).start()
+root.mainloop()

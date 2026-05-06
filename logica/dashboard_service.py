@@ -120,3 +120,30 @@ class DashboardService:
         except Exception as e:
             app_logger.error(f"Error al obtener suscripciones: {e}")
             return []
+
+    def obtener_datos_calendario(self, anio: int, mes: int) -> dict:
+        """
+        Optimización: Obtiene todas las llamadas y renovaciones del mes 
+        en un solo objeto estructurado por día para acelerar el renderizado de la UI.
+        """
+        datos = {}
+        try:
+            # Podríamos optimizar esto más con una sola query compleja en el repo, 
+            # pero por ahora consolidamos la lógica de negocio aquí.
+            llamadas = self.obtener_llamadas_mes(anio, mes)
+            suscripciones = self.obtener_suscripciones_mes(anio, mes)
+            
+            for ll in llamadas:
+                dia = ll.fecha.day
+                datos.setdefault(dia, {"llamadas": [], "renovaciones": []})
+                datos[dia]["llamadas"].append({"id": ll.id, "nombre": ll.nombre})
+                
+            for s in suscripciones:
+                dia = s.fecha_renovacion.day
+                datos.setdefault(dia, {"llamadas": [], "renovaciones": []})
+                datos[dia]["renovaciones"].append(s.atleta.nombre_completo)
+                
+            return datos
+        except Exception as e:
+            app_logger.error(f"Error consolidando datos del calendario: {e}")
+            return {}

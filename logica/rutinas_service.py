@@ -2,6 +2,7 @@ import logging
 import os
 from sqlalchemy.orm import Session
 from logica.vlm_service import VLMService
+from logica.routine_transformer import RoutineTransformerService
 from bbdd.repository import RoutineRepository
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,7 @@ class RutinasService:
     def __init__(self, session: Session):
         self.session = session
         self.vlm_service = VLMService.get_instance()
+        self.transformer = RoutineTransformerService()
         self.repo = RoutineRepository(session)
         
         
@@ -35,42 +37,8 @@ class RutinasService:
             if not ejercicios_vlm:
                 return {"success": False, "error": "La IA no pudo extraer ningún ejercicio de la libreta."}
 
-            # 2. Adaptar al formato esperado por el Repository
-            ejercicios_db = []
-            for ej in ejercicios_vlm:
-                nombre_raw = ej.get("nombre", "Desconocido")
-                nombre_enriquecido = self._normalizar_nombre(nombre_raw)
-                
-                if not nombre_enriquecido:
-                    logger.info(f"Ignorando texto aleatorio/desconocido: {nombre_raw}")
-                    continue
-                
-                rango_reps = ej.get("rango_reps", "")
-                series_list = ej.get("series", [])
-                
-                num_series = len(series_list) if isinstance(series_list, list) else 1
-                
-                series_verbose_parts = []
-                for idx, s in enumerate(series_list, 1):
-                    s_str = str(s).lower()
-                    if "x" in s_str:
-                        parts = s_str.split("x")
-                        reps_str = f"{parts[0].strip()} reps"
-                        peso_str = f"{parts[1].strip()}kg" if len(parts) > 1 else ""
-                        series_verbose_parts.append(f"Serie {idx}: {reps_str} {peso_str}".strip())
-                    else:
-                        series_verbose_parts.append(f"Serie {idx}: {s_str}")
-                
-                peso_obj = " | ".join(series_verbose_parts)
-                reps_final = f"{rango_reps} reps objetivo" if rango_reps else "No especificado"
-                
-                ejercicios_db.append({
-                    "nombre_ejercicio": nombre_enriquecido,
-                    "series": str(num_series),
-                    "repeticiones": reps_final,
-                    "peso_objetivo": peso_obj,
-                    "tiempo_descanso": ""
-                })
+            # 2. Adaptar al formato esperado por el Repository usando el nuevo servicio
+            ejercicios_db = self.transformer.transformar_datos_vlm_a_db(vlm_data)
             
             if not ejercicios_db:
                 return {"success": False, "error": "No se encontraron ejercicios validos en la imagen tras filtrar ruido."}
@@ -98,6 +66,47 @@ class RutinasService:
             logger.error(f"Error parseando VLM: {e}")
             import traceback
             traceback.print_exc()
+            return {"success": False, "error": str(e)}
+
+    def procesar_imagen_vlm_secuencial(self, image_path: str, progress_callback=None) -> dict:
+        """
+        Versión mejorada: Procesa la imagen por etapas (Cabecera -> Lista -> Detalles)
+        para mejorar la precisión y dar feedback en tiempo real.
+        """
+        try:
+            logger.info(f"Enviando imagen a VLMService (MODO SECUENCIAL): {image_path}")
+            
+            # 1. IA - VLM en modo secuencial
+            vlm_data = self.vlm_service.procesar_imagen_rutina_secuencial(image_path, progress_callback)
+            
+            if "error" in vlm_data and not vlm_data.get("ejercicios"):
+                return {"success": False, "error": vlm_data["error"]}
+                
+            ejercicios_vlm = vlm_data.get("ejercicios", [])
+            
+            if not ejercicios_vlm:
+                return {"success": False, "error": "La IA no pudo extraer ningún ejercicio."}
+
+            # 2. Adaptar al formato esperado por el Repository
+            ejercicios_db = self.transformer.transformar_datos_vlm_a_db(vlm_data)
+            
+            # 3. Construir prefijo
+            meso = vlm_data.get("mesociclo", "")
+            sem = vlm_data.get("semana", "")
+            ses = vlm_data.get("sesion", "")
+            nombre_gen = []
+            if meso: nombre_gen.append(f"Meso {meso}")
+            if sem: nombre_gen.append(f"Sem {sem}")
+            if ses: nombre_gen.append(f"Ses {ses}")
+            prefijo = " - ".join(nombre_gen)
+            
+            return {
+                "success": True, 
+                "data": ejercicios_db, 
+                "prefijo": prefijo
+            }
+        except Exception as e:
+            logger.error(f"Error en RutinasService secuencial: {e}")
             return {"success": False, "error": str(e)}
 
     def procesar_y_guardar_imagen(self, atleta_id: int, image_path: str, nombre_rutina: str = None) -> dict:
@@ -139,38 +148,4 @@ class RutinasService:
             traceback.print_exc()
             return {"success": False, "error": str(e)}
 
-    def _normalizar_nombre(self, nombre_ia: str) -> str:
-        """
-        Intenta expandir abreviaturas y encontrar el nombre canónico del ejercicio.
-        Retorna 'Original (Canonico)' si hay coincidencia.
-        Si no hay coincidencia, retorna None (para filtrar strings aleatorios).
-        """
-        try:
-            from logica.ia_service import ExpansorAbreviaturas, ABREVIATURAS, EJERCICIOS_CANONICOS, _normalizar_texto_base
-            import difflib
-            
-            nombre_clean = nombre_ia.strip()
-            nombre_norm = _normalizar_texto_base(nombre_clean)
-            
-            if nombre_norm in EJERCICIOS_CANONICOS:
-                return nombre_clean
-                
-            expansor = ExpansorAbreviaturas(ABREVIATURAS)
-            nombre_exp = expansor.expandir(nombre_clean)
-            
-            # 1. Si hubo expansión por diccionario de abreviaturas
-            if nombre_exp.lower() != nombre_norm.lower():
-                return f"{nombre_clean} ({nombre_exp.title()})"
-            
-            # 2. Si no, búsqueda difusa (Fuzzy Match) en el catálogo canónico completo con mayor tolerancia
-            coincidencias = difflib.get_close_matches(nombre_norm, EJERCICIOS_CANONICOS, n=1, cutoff=0.5)
-            if coincidencias:
-                if coincidencias[0].lower() != nombre_norm.lower():
-                    return f"{nombre_clean} ({coincidencias[0].title()})"
-                return nombre_clean
-            
-            return None
-        except Exception as e:
-            logger.error(f"Error en normalización de nombre: {e}")
-            return None
 

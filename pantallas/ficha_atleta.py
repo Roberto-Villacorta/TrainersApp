@@ -9,6 +9,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from bbdd.database import SessionLocal
 from logica.atletas_service import AtletasService
+from logica.media_service import MediaService
+from logica.stats_service import StatsService
 from bbdd.models import FormularioSemanal
 from logica.ia_form_service import IAFormService
 
@@ -266,7 +268,7 @@ class FichaAtleta(ctk.CTkScrollableFrame):
         self.lbl_nombre.pack(side="left", padx=10, pady=20)
         
         # Botón para añadir formulario (Nuevo)
-        self.btn_formulario = ctk.CTkButton(self.frame_perfil, text="📋 Añadir Formulario", width=160, 
+        self.btn_formulario = ctk.CTkButton(self.frame_perfil, text="Añadir Formulario", width=160, 
                                             fg_color="#2e8c4a", hover_color="#1b5e20", command=self.abrir_formulario)
         self.btn_formulario.pack(side="right", padx=20, pady=20)
         
@@ -281,12 +283,6 @@ class FichaAtleta(ctk.CTkScrollableFrame):
                "- Gráficos: Compara el último reporte con el anterior.")
         messagebox.showinfo("Ayuda: Ficha de Atleta", msg)
 
-    def crear_avatar_por_defecto(self, nombre):
-        img = Image.new('RGB', (100, 100), color=(100, 100, 150))
-        d = ImageDraw.Draw(img)
-        letra = nombre[0].upper() if nombre else "?"
-        d.text((40, 40), letra, fill=(255, 255, 255))
-        return img
 
     def abrir_formulario(self):
         if self.id_atleta_actual:
@@ -296,120 +292,6 @@ class FichaAtleta(ctk.CTkScrollableFrame):
         nombre = self.lbl_nombre.cget("text")
         DialogoVerFormulario(self, form, nombre)
 
-    def renderizar_graficos(self):
-        # Limpiar frame de contenido
-        for widget in self.frame_contenido.winfo_children():
-            widget.destroy()
-            
-        with SessionLocal() as session:
-            todos_los_formularios = session.query(FormularioSemanal).filter(
-                FormularioSemanal.atleta_id == self.id_atleta_actual
-            ).order_by(FormularioSemanal.fecha_registro.desc()).all()
-            
-            formularios = todos_los_formularios[:2]
-            
-            # 1. Resumen IA
-            if self.ultimo_resumen_ia:
-                f_ia = ctk.CTkFrame(self.frame_contenido, fg_color="#1d4066")
-                f_ia.pack(fill="x", pady=(0, 20))
-                ctk.CTkLabel(f_ia, text="🤖 " + self.ultimo_resumen_ia, font=ctk.CTkFont(size=14, weight="bold"), text_color="white", wraplength=500).pack(pady=10, padx=10)
-            elif formularios and formularios[0].dudas:
-                # Si no acabamos de guardar pero hay dudas en el último
-                f_ia = ctk.CTkFrame(self.frame_contenido, fg_color="#1d4066")
-                f_ia.pack(fill="x", pady=(0, 20))
-                ctk.CTkLabel(f_ia, text=f"🤖 Últimas dudas del atleta: {formularios[0].dudas}", font=ctk.CTkFont(size=14, italic=True), text_color="white", wraplength=500).pack(pady=10, padx=10)
-
-            if not todos_los_formularios:
-                lbl = ctk.CTkLabel(self.frame_contenido, text="No hay formularios registrados para este atleta.", font=ctk.CTkFont(size=14, slant="italic"))
-                lbl.pack(pady=40)
-                return
-                
-            # Grafico Comparativo
-            if len(formularios) >= 2:
-                form_actual = formularios[0]
-                form_anterior = formularios[1]
-                
-                # Comparar y encontrar mejor/peor
-                metricas = {
-                    "Satisfacción": (form_actual.satisfaccion_general, form_anterior.satisfaccion_general),
-                    "Mejora (Entreno)": (form_actual.mejora_entrenamiento, form_anterior.mejora_entrenamiento),
-                    "Fruta": (form_actual.fruta_consumo, form_anterior.fruta_consumo),
-                    "Verdura": (form_actual.verdura_consumo, form_anterior.verdura_consumo)
-                }
-                
-                mejor_metrica = ""
-                mejor_diff = -999
-                peor_metrica = ""
-                peor_diff = 999
-                
-                for nombre, (act, ant) in metricas.items():
-                    if act is None or ant is None: continue
-                    diff = act - ant
-                    if diff > mejor_diff:
-                        mejor_diff = diff
-                        mejor_metrica = nombre
-                    if diff < peor_diff:
-                        peor_diff = diff
-                        peor_metrica = nombre
-                        
-                # Resumen de cambios
-                f_cambios = ctk.CTkFrame(self.frame_contenido, fg_color="transparent")
-                f_cambios.pack(fill="x", pady=10)
-                
-                if mejor_metrica and mejor_diff > 0:
-                    ctk.CTkLabel(f_cambios, text=f"🌟 MEJOR CAMBIO: {mejor_metrica} (+{mejor_diff})", font=ctk.CTkFont(weight="bold"), text_color="#2e8c4a").pack(side="left", padx=20)
-                if peor_metrica and peor_diff < 0:
-                    ctk.CTkLabel(f_cambios, text=f"⚠️ PEOR CAMBIO: {peor_metrica} ({peor_diff})", font=ctk.CTkFont(weight="bold"), text_color="#c25757").pack(side="right", padx=20)
-
-                # Matplotlib Chart
-                fig, ax = plt.subplots(figsize=(6, 4), facecolor='#2b2b2b')
-                ax.set_facecolor('#2b2b2b')
-                ax.tick_params(colors='white')
-                for spine in ax.spines.values():
-                    spine.set_edgecolor('white')
-
-                etiquetas = list(metricas.keys())
-                valores_act = [m[0] or 0 for m in metricas.values()]
-                valores_ant = [m[1] or 0 for m in metricas.values()]
-
-                x = range(len(etiquetas))
-                width = 0.35
-
-                ax.bar([i - width/2 for i in x], valores_ant, width, label='Anterior', color='#4a90e2')
-                ax.bar([i + width/2 for i in x], valores_act, width, label='Actual', color='#2e8c4a')
-
-                ax.set_ylabel('Valor', color='white')
-                ax.set_title('Comparativa de Formularios', color='white')
-                ax.set_xticks(x)
-                ax.set_xticklabels(etiquetas, color='white')
-                ax.legend()
-
-                canvas = FigureCanvasTkAgg(fig, master=self.frame_contenido)
-                canvas.draw()
-                canvas.get_tk_widget().pack(fill="both", expand=True, pady=20)
-                # Liberar la figura de memoria una vez incrustada en el canvas
-                plt.close(fig)
-            else:
-                lbl = ctk.CTkLabel(self.frame_contenido, text="Se necesita al menos otro formulario para ver la comparativa. ¡Buen comienzo!", font=ctk.CTkFont(size=14, slant="italic"))
-                lbl.pack(pady=40)
-            
-            # --- Historial de Formularios ---
-            f_historial = ctk.CTkFrame(self.frame_contenido, fg_color="transparent")
-            f_historial.pack(fill="x", pady=(20, 10))
-            
-            ctk.CTkLabel(f_historial, text="Historial de Formularios", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w", pady=(0, 10))
-            nombre_atleta = self.lbl_nombre.cget("text")
-            
-            for form in todos_los_formularios:
-                btn_form = ctk.CTkButton(
-                    f_historial,
-                    text=f"Formulario de {nombre_atleta} día {form.fecha_registro.strftime('%d/%m/%Y')}",
-                    fg_color="#3a3a3a",
-                    hover_color="#5a5a5a",
-                    anchor="w",
-                    command=lambda f=form: self.ver_formulario(f)
-                )
-                btn_form.pack(fill="x", pady=2)
 
 
     def cargar_atleta(self, id_atleta):
@@ -425,16 +307,8 @@ class FichaAtleta(ctk.CTkScrollableFrame):
 
             self.lbl_nombre.configure(text=atleta.nombre_completo)
 
-            if atleta.foto_perfil:
-                try:
-                    img = Image.open(io.BytesIO(atleta.foto_perfil))
-                    img = img.resize((100, 100), Image.LANCZOS)
-                except Exception:
-                    img = self.crear_avatar_por_defecto(atleta.nombre_completo)
-            else:
-                img = self.crear_avatar_por_defecto(atleta.nombre_completo)
-
-            self.imagen_cargada = ctk.CTkImage(light_image=img, dark_image=img, size=(100, 100))
+            # Uso de MediaService para consistencia y eficiencia
+            self.imagen_cargada = MediaService.obtener_avatar_atleta(atleta)
             self.lbl_foto.configure(image=self.imagen_cargada)
 
         # Mostrar spinner de carga mientras se generan los gráficos en segundo plano
@@ -483,43 +357,29 @@ class FichaAtleta(ctk.CTkScrollableFrame):
         if self.ultimo_resumen_ia:
             f_ia = ctk.CTkFrame(self.frame_contenido, fg_color="#1d4066")
             f_ia.pack(fill="x", pady=(0, 20))
-            ctk.CTkLabel(f_ia, text="🤖 " + self.ultimo_resumen_ia, font=ctk.CTkFont(size=14, weight="bold"), text_color="white", wraplength=500).pack(pady=10, padx=10)
+            ctk.CTkLabel(f_ia, text="IA: " + self.ultimo_resumen_ia, font=ctk.CTkFont(size=14, weight="bold"), text_color="white", wraplength=500).pack(pady=10, padx=10)
         elif formularios and formularios[0].dudas:
             f_ia = ctk.CTkFrame(self.frame_contenido, fg_color="#1d4066")
             f_ia.pack(fill="x", pady=(0, 20))
-            ctk.CTkLabel(f_ia, text=f"🤖 Últimas dudas del atleta: {formularios[0].dudas}", font=ctk.CTkFont(size=14, italic=True), text_color="white", wraplength=500).pack(pady=10, padx=10)
+            ctk.CTkLabel(f_ia, text=f"Ultimas dudas del atleta: {formularios[0].dudas}", font=ctk.CTkFont(size=14, italic=True), text_color="white", wraplength=500).pack(pady=10, padx=10)
 
         if not todos_los_formularios:
             ctk.CTkLabel(self.frame_contenido, text="No hay formularios registrados para este atleta.", font=ctk.CTkFont(size=14, slant="italic")).pack(pady=40)
             return
 
-        # Gráfico comparativo
-        if len(formularios) >= 2:
-            form_actual   = formularios[0]
-            form_anterior = formularios[1]
+        # Análisis comparativo delegado al StatsService
+        comparativa = StatsService.obtener_comparativa_formularios(todos_los_formularios)
 
-            metricas = {
-                "Satisfacción":   (form_actual.satisfaccion_general,  form_anterior.satisfaccion_general),
-                "Mejora (Entreno)": (form_actual.mejora_entrenamiento, form_anterior.mejora_entrenamiento),
-                "Fruta":          (form_actual.fruta_consumo,          form_anterior.fruta_consumo),
-                "Verdura":        (form_actual.verdura_consumo,        form_anterior.verdura_consumo),
-            }
-
-            mejor_metrica, mejor_diff = "", -999
-            peor_metrica,  peor_diff  = "", 999
-            for nombre, (act, ant) in metricas.items():
-                if act is None or ant is None:
-                    continue
-                diff = act - ant
-                if diff > mejor_diff: mejor_diff, mejor_metrica = diff, nombre
-                if diff < peor_diff:  peor_diff,  peor_metrica  = diff, nombre
+        if comparativa:
+            mejor = comparativa["mejor_cambio"]
+            peor = comparativa["peor_cambio"]
 
             f_cambios = ctk.CTkFrame(self.frame_contenido, fg_color="transparent")
             f_cambios.pack(fill="x", pady=10)
-            if mejor_metrica and mejor_diff > 0:
-                ctk.CTkLabel(f_cambios, text=f"🌟 MEJOR CAMBIO: {mejor_metrica} (+{mejor_diff})", font=ctk.CTkFont(weight="bold"), text_color="#2e8c4a").pack(side="left", padx=20)
-            if peor_metrica and peor_diff < 0:
-                ctk.CTkLabel(f_cambios, text=f"⚠️ PEOR CAMBIO: {peor_metrica} ({peor_diff})", font=ctk.CTkFont(weight="bold"), text_color="#c25757").pack(side="right", padx=20)
+            if mejor:
+                ctk.CTkLabel(f_cambios, text=f"MEJOR CAMBIO: {mejor['nombre']} (+{mejor['diff']})", font=ctk.CTkFont(weight="bold"), text_color="#2e8c4a").pack(side="left", padx=20)
+            if peor:
+                ctk.CTkLabel(f_cambios, text=f"PEOR CAMBIO: {peor['nombre']} ({peor['diff']})", font=ctk.CTkFont(weight="bold"), text_color="#c25757").pack(side="right", padx=20)
 
             fig, ax = plt.subplots(figsize=(6, 4), facecolor='#2b2b2b')
             ax.set_facecolor('#2b2b2b')
@@ -527,9 +387,9 @@ class FichaAtleta(ctk.CTkScrollableFrame):
             for spine in ax.spines.values():
                 spine.set_edgecolor('white')
 
-            etiquetas   = list(metricas.keys())
-            valores_act = [m[0] or 0 for m in metricas.values()]
-            valores_ant = [m[1] or 0 for m in metricas.values()]
+            etiquetas = comparativa["labels"]
+            valores_act = comparativa["valores_actual"]
+            valores_ant = comparativa["valores_anterior"]
             x, width = range(len(etiquetas)), 0.35
 
             ax.bar([i - width/2 for i in x], valores_ant, width, label='Anterior', color='#4a90e2')
@@ -543,7 +403,7 @@ class FichaAtleta(ctk.CTkScrollableFrame):
             canvas = FigureCanvasTkAgg(fig, master=self.frame_contenido)
             canvas.draw()
             canvas.get_tk_widget().pack(fill="both", expand=True, pady=20)
-            plt.close(fig)  # liberar memoria: la figura ya está incrustada en el canvas
+            plt.close(fig)
         else:
             ctk.CTkLabel(self.frame_contenido, text="Se necesita al menos otro formulario para ver la comparativa. ¡Buen comienzo!", font=ctk.CTkFont(size=14, slant="italic")).pack(pady=40)
 

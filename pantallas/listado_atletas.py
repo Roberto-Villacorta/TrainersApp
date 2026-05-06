@@ -2,9 +2,11 @@ import customtkinter as ctk
 import io
 import hashlib
 import threading
+import queue
 from PIL import Image, ImageDraw
 from bbdd.database import SessionLocal
 from logica.atletas_service import AtletasService
+from logica.media_service import MediaService
 from utils.dialogos_atletas import DialogoRegistrarAtleta, DialogoActualizarAtleta, DialogoBorrarAtleta
 
 class ListadoAtletas(ctk.CTkFrame):
@@ -36,10 +38,23 @@ class ListadoAtletas(ctk.CTkFrame):
         self.frame_lista = ctk.CTkScrollableFrame(self)
         self.frame_lista.pack(fill="both", expand=True, padx=20, pady=10)
 
-        # Caché de imágenes: clave = (atleta_id, md5_foto) para no reprocesar fotos que no cambiaron.
-        # Para avatares por defecto la clave es (atleta_id, None).
-        self._cache_imagenes: dict = {}
+        # Cola para comunicación segura entre hilos
+        self.cola_datos = queue.Queue()
+        self.verificar_cola()
+
         self.renderizar_lista()
+
+    def verificar_cola(self):
+        """Monitorea la cola para actualizar la UI desde el hilo principal."""
+        try:
+            while True:
+                datos = self.cola_datos.get_nowait()
+                self._construir_tarjetas(datos)
+        except queue.Empty:
+            pass
+        finally:
+            # Seguir monitoreando (cada 100ms)
+            self.after(100, self.verificar_cola)
 
     def mostrar_ayuda(self):
         from tkinter import messagebox
@@ -80,28 +95,6 @@ class ListadoAtletas(ctk.CTkFrame):
         atletas = self.obtener_atletas_activos()
         DialogoBorrarAtleta(self, atletas, al_completar_callback=self.renderizar_lista)
 
-    def crear_avatar_por_defecto(self, nombre: str) -> Image.Image:
-        """Genera un avatar con la inicial del nombre sobre fondo azul oscuro."""
-        img = Image.new('RGB', (60, 60), color=(60, 80, 140))
-        d = ImageDraw.Draw(img)
-        letra = nombre[0].upper() if nombre else "?"
-        d.text((20, 15), letra, fill=(255, 255, 255))
-        return img
-
-    def _obtener_ctk_image(self, atleta_id: int, foto_bytes: bytes | None, nombre: str) -> ctk.CTkImage:
-        """Devuelve la CTkImage del atleta, usando caché para no reprocesar si la foto no cambió."""
-        clave_hash = hashlib.md5(foto_bytes).hexdigest() if foto_bytes else None
-        clave = (atleta_id, clave_hash)
-        if clave not in self._cache_imagenes:
-            if foto_bytes:
-                try:
-                    img = Image.open(io.BytesIO(foto_bytes)).resize((60, 60), Image.LANCZOS)
-                except Exception:
-                    img = self.crear_avatar_por_defecto(nombre)
-            else:
-                img = self.crear_avatar_por_defecto(nombre)
-            self._cache_imagenes[clave] = ctk.CTkImage(light_image=img, dark_image=img, size=(60, 60))
-        return self._cache_imagenes[clave]
 
     def renderizar_lista(self):
         """Consulta la BBDD en hilo secundario y construye las tarjetas en el hilo principal."""
@@ -126,7 +119,8 @@ class ListadoAtletas(ctk.CTkFrame):
                 }
                 for a in atletas
             ]
-        self.after(0, lambda: self._construir_tarjetas(datos))
+        # Enviamos los datos a la cola para que el hilo principal los procese
+        self.cola_datos.put(datos)
 
     def _construir_tarjetas(self, datos: list):
         """Construye las tarjetas en el hilo principal usando los datos recibidos del hilo secundario."""
@@ -143,7 +137,7 @@ class ListadoAtletas(ctk.CTkFrame):
             card = ctk.CTkFrame(self.frame_lista, cursor="hand2")
             card.pack(fill="x", pady=5, padx=5)
 
-            ctk_img = self._obtener_ctk_image(atleta["id"], atleta["foto_perfil"], atleta["nombre"])
+            ctk_img = MediaService.obtener_avatar_atleta(atleta["id"], atleta["foto_perfil"], atleta["nombre"])
 
             lbl_img = ctk.CTkLabel(card, image=ctk_img, text="")
             lbl_img.pack(side="left", padx=15, pady=10)

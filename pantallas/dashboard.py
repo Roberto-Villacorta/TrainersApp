@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import calendar
 import threading
+import queue
 from datetime import datetime
 from bbdd.database import SessionLocal
 from logica.dashboard_service import DashboardService
@@ -173,7 +174,23 @@ class Dashboard(ctk.CTkScrollableFrame):
         # Caché de llamadas y suscripciones del mes visible
         self._cache_llamadas: dict = {}
         self._cache_suscripciones: dict = {}
+        # Cola para comunicación de métricas
+        self.cola_metricas = queue.Queue()
+        self.verificar_cola_metricas()
+
         self.actualizar_calendario()
+
+    def verificar_cola_metricas(self):
+        """Monitorea la cola de métricas."""
+        try:
+            while True:
+                metricas = self.cola_metricas.get_nowait()
+                self.lbl_num_atletas.configure(text=str(metricas["atletas_activos"]))
+                self.lbl_num_forms.configure(text=str(metricas["formularios_pendientes"]))
+        except queue.Empty:
+            pass
+        finally:
+            self.after(150, self.verificar_cola_metricas)
 
     def mostrar_ayuda(self):
         from tkinter import messagebox
@@ -198,8 +215,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         """Consulta métricas en segundo plano y actualiza los labels en el hilo principal."""
         with SessionLocal() as session:
             metricas = DashboardService(session).obtener_metricas_dashboard()
-        self.after(0, lambda: self.lbl_num_atletas.configure(text=str(metricas["atletas_activos"])))
-        self.after(0, lambda: self.lbl_num_forms.configure(text=str(metricas["formularios_pendientes"])))
+        self.cola_metricas.put(metricas)
 
     def actualizar_calendario(self):
         """Reconstruye el grid del calendario de forma síncrona con un swap atómico.
@@ -211,24 +227,16 @@ class Dashboard(ctk.CTkScrollableFrame):
                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
         self.lbl_mes_anio.configure(text=f"{meses[self.current_month-1]} {self.current_year}")
 
-        # Consultar datos del mes en el hilo principal (SQLite local = microsegundos)
-        llamadas_mes: dict = {}
-        suscripciones_mes: dict = {}
+        # Consultar datos del mes en un solo paso optimizado
         with SessionLocal() as session:
             ds = DashboardService(session)
-            for ll in ds.obtener_llamadas_mes(self.current_year, self.current_month):
-                llamadas_mes.setdefault(ll.fecha.day, []).append({"id": ll.id, "nombre": ll.nombre})
-            for s in ds.obtener_suscripciones_mes(self.current_year, self.current_month):
-                suscripciones_mes.setdefault(s.fecha_renovacion.day, []).append(s.atleta.nombre_completo)
+            datos_mes = ds.obtener_datos_calendario(self.current_year, self.current_month)
 
-        self._construir_botones_calendario(llamadas_mes, suscripciones_mes, scroll_y)
+        self._construir_botones_calendario(datos_mes, scroll_y)
 
-    def _construir_botones_calendario(self, llamadas_mes: dict, suscripciones_mes: dict, scroll_y: float = 0.0):
-        """Sustituye los botones del calendario de forma atómica para evitar el efecto de carga visible.
-        Oculta el frame del grid, destruye los botones viejos, construye los nuevos y lo muestra
-        todo de una sola vez para que el usuario no vea el proceso intermedio."""
-        self._cache_llamadas    = llamadas_mes
-        self._cache_suscripciones = suscripciones_mes
+    def _construir_botones_calendario(self, datos_mes: dict, scroll_y: float = 0.0):
+        """Sustituye los botones del calendario de forma atómica."""
+        self._cache_cal_datos = datos_mes
 
         # 1. Ocultar el grid mientras se hace la sustitución
         self.frame_grid_calendario.pack_forget()
@@ -244,17 +252,22 @@ class Dashboard(ctk.CTkScrollableFrame):
         for row, semana in enumerate(cal):
             for col, dia in enumerate(semana):
                 if dia != 0:
+                    info_dia = datos_mes.get(dia, {"llamadas": [], "renovaciones": []})
+                    llamadas = info_dia["llamadas"]
+                    renovaciones = info_dia["renovaciones"]
+
                     texto_boton = str(dia)
                     color_fondo = ("gray80", "gray25")
                     color_hover = ("gray70", "gray35")
 
-                    if dia in llamadas_mes or dia in suscripciones_mes:
-                        nombres = [ll["nombre"] for ll in llamadas_mes.get(dia, [])]
-                        nombres += [f"💸 {n}" for n in suscripciones_mes.get(dia, [])]
+                    if llamadas or renovaciones:
+                        nombres = [ll["nombre"] for ll in llamadas]
+                        nombres += [f"💸 {n}" for n in renovaciones]
                         texto_boton += "\n" + "\n".join(nombres)
 
-                        tiene_llamada = dia in llamadas_mes
-                        tiene_pago    = dia in suscripciones_mes
+                        tiene_llamada = bool(llamadas)
+                        tiene_pago    = bool(renovaciones)
+                        
                         if tiene_pago and not tiene_llamada:
                             color_fondo, color_hover = ("#2e8c4a", "#1b5e20"), ("#3ba359", "#2e7d32")
                         elif tiene_llamada and not tiene_pago:
@@ -269,7 +282,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                         text_color=("black", "white"),
                         hover_color=color_hover,
                         height=60,
-                        command=lambda d=dia, l_dia=llamadas_mes.get(dia, []): self.abrir_dialogo_llamada(d, l_dia)
+                        command=lambda d=dia, l_dia=llamadas: self.abrir_dialogo_llamada(d, l_dia)
                     )
                     btn_dia.grid(row=row + 1, column=col, padx=2, pady=2, sticky="nsew")
                     self.dias_botones.append(btn_dia)
