@@ -1,0 +1,51 @@
+name: Build macOS Installer
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build with PyInstaller
+      run: |
+        python -m PyInstaller TrainersApp.spec --clean --noconfirm
+
+    - name: Install create-dmg
+      run: brew install create-dmg
+
+    - name: Create DMG
+      run: |
+        create-dmg \
+          --volname "TrainersApp Installer" \
+          --window-pos 200 120 \
+          --window-size 800 400 \
+          --icon-size 100 \
+          --icon "TrainersApp.app" 200 190 \
+          --hide-extension "TrainersApp.app" \
+          --app-drop-link 600 185 \
+          "dist/TrainersApp_Installer.dmg" \
+          "dist/TrainersApp.app"
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: TrainersApp-macOS-Installer
+        path: dist/TrainersApp_Installer.dmg

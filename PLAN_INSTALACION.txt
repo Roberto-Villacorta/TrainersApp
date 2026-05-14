@@ -1,0 +1,33 @@
+# PLAN DE INSTALACIÓN - TRAINERSAPP
+
+Este documento contiene los pasos para crear el instalador de la aplicación en Windows y macOS.
+
+1. RESUMEN DEL PROYECTO
+-----------------------
+Convertir el código fuente de TrainersApp en un ejecutable empaquetado (.exe para Windows, .app/.dmg para macOS).
+
+2. CONSIDERACIONES CRÍTICAS
+---------------------------
+* TAMAÑO: Los modelos de IA son pesados. El instalador descargará los modelos en la primera ejecución para mantener un tamaño ligero (~200MB).
+* HARDWARE: La función de escaneo IA requiere GPU NVIDIA.
+* PERSISTENCIA: Se cambiará la ubicación de la base de datos a la carpeta AppData/Application Support del usuario para evitar errores de permisos.
+
+3. CAMBIOS EN EL CÓDIGO
+-----------------------
+* Crear utils/paths.py para centralizar las rutas de datos.
+* Actualizar bbdd/database.py, logica/ia_service.py y logica/vlm_service.py para usar las nuevas rutas.
+
+4. PROCESO DE EMPAQUETADO (PyInstaller)
+---------------------------------------
+* Se creará un archivo 'TrainersApp.spec' con la configuración técnica.
+* Comando principal: pyinstaller TrainersApp.spec
+
+5. CREACIÓN DEL INSTALADOR FINAL
+--------------------------------
+* Windows: Se utilizará Inno Setup para crear el asistente de instalación.
+* macOS: Se generará un archivo .app y opcionalmente un .dmg.
+
+6. VERIFICACIÓN
+---------------
+* Comprobar que la app inicia correctamente después de la instalación.
+* Verificar que la base de datos se crea en la carpeta de usuario y no se pierde al actualizar.
