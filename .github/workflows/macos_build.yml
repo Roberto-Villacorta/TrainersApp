@@ -2,21 +2,22 @@ name: Build macOS Installer
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, main ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest
-
+    runs-on: macos-13 # Intel runner for broader compatibility
+    
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
@@ -27,6 +28,13 @@ jobs:
     - name: Build with PyInstaller
       run: |
         python -m PyInstaller TrainersApp.spec --clean --noconfirm
+
+    - name: Verify build
+      run: |
+        if [ ! -d "dist/TrainersApp.app" ]; then
+          echo "Error: TrainersApp.app was not created."
+          exit 1
+        fi
 
     - name: Install create-dmg
       run: brew install create-dmg
@@ -45,7 +53,7 @@ jobs:
           "dist/TrainersApp.app"
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: TrainersApp-macOS-Installer
         path: dist/TrainersApp_Installer.dmg
